@@ -8,10 +8,11 @@ import com.frietsync.backend.otp.enums.OtpPurpose;
 import com.frietsync.backend.otp.repository.OtpRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
-import java.security.SecureRandom;
 import java.time.Duration;
+import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -56,4 +57,20 @@ public class OtpService {
         otp.setUsed(true);
         otpRepository.save(otp);
     }
+    public boolean isOtpValid(String email, String code, OtpPurpose purpose) {
+        List<Otp> allOtpsForThisEmail = otpRepository.findByEmailAndPurpose(email, purpose);
+        for (Otp otp : allOtpsForThisEmail) {
+            if (otp.isUsed()) {
+                continue;
+            }
+            if (Instant.now().isAfter(otp.getExpiresAt())) {
+                continue;
+            }
+            if (otp.getCode().equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }
