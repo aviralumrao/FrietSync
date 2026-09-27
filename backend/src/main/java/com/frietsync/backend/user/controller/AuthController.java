@@ -1,6 +1,12 @@
 package com.frietsync.backend.user.controller;
 
-import com.frietsync.backend.user.dto.*;
+import com.frietsync.backend.user.dto.AuthResponse;
+import com.frietsync.backend.user.dto.ForgotPasswordRequest;
+import com.frietsync.backend.user.dto.LoginRequest;
+import com.frietsync.backend.user.dto.ResetPasswordRequest;
+import com.frietsync.backend.user.dto.SignupRequest;
+import com.frietsync.backend.user.dto.UserResponse;
+import com.frietsync.backend.user.dto.VerifyOtpRequest;
 import com.frietsync.backend.user.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,9 +38,21 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/verify-otp")
-    public ResponseEntity<Map<String, String>> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
-        authService.verifySignupOtp(request);
-        return ResponseEntity.ok(Map.of("message", "Account verified successfully"));
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(Map.of("message", "OTP has been sent to your email"));
+    }
+
+    @PostMapping("/verify-reset-otp")
+    public ResponseEntity<Map<String, String>> verifyResetOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        authService.verifyResetOtp(request);
+        return ResponseEntity.ok(Map.of("message", "OTP verified successfully"));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(Map.of("message", "Password has been reset successfully"));
     }
 }
