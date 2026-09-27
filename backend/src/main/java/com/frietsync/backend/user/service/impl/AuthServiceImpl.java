@@ -2,10 +2,9 @@ package com.frietsync.backend.user.service.impl;
 
 import com.frietsync.backend.common.exception.BadRequestException;
 import com.frietsync.backend.common.security.JwtUtil;
-import com.frietsync.backend.user.dto.AuthResponse;
-import com.frietsync.backend.user.dto.LoginRequest;
-import com.frietsync.backend.user.dto.SignupRequest;
-import com.frietsync.backend.user.dto.UserResponse;
+import com.frietsync.backend.otp.enums.OtpPurpose;
+import com.frietsync.backend.otp.service.OtpService;
+import com.frietsync.backend.user.dto.*;
 import com.frietsync.backend.user.entity.User;
 import com.frietsync.backend.user.enums.Role;
 import com.frietsync.backend.user.repository.UserRepository;
@@ -21,6 +20,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final OtpService otpService;
 
     public UserResponse signup(SignupRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
@@ -34,9 +34,11 @@ public class AuthServiceImpl implements AuthService {
         user.setEmail(request.getEmail());
         user.setPasswordHash(hashedPassword);
         user.setRole(Role.ADMIN);
-        user.setActive(true);
+        user.setActive(false);
 
         User savedUser = userRepository.save(user);
+
+        otpService.sendOtp(savedUser.getEmail(), OtpPurpose.SIGNUP);
 
         return UserResponse.fromEntity(savedUser);
     }
@@ -52,5 +54,16 @@ public class AuthServiceImpl implements AuthService {
         String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name());
 
         return new AuthResponse(UserResponse.fromEntity(user), token);
+    }
+
+    @Override
+    public void verifySignupOtp(VerifyOtpRequest request) {
+        otpService.verifyOtp(request.getEmail(), request.getCode(), OtpPurpose.SIGNUP);
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        user.setActive(true);
+        userRepository.save(user);
     }
 }
