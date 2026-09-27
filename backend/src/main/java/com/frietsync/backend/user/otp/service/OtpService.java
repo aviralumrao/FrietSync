@@ -8,7 +8,7 @@ import com.frietsync.backend.otp.enums.OtpPurpose;
 import com.frietsync.backend.otp.repository.OtpRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
+import java.time.Duration;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -46,15 +46,31 @@ public class OtpService {
                 .findFirst()
                 .orElseThrow(() -> new BadRequestException("No OTP found for this email"));
 
-        if (Instant.now().isAfter(latestUnused.getExpiresAt())) {
+        if (Instant.now().isAfter(otp.getExpiresAt())) {
             throw new BadRequestException("OTP has expired");
         }
 
-        if (!latestUnused.getCode().equals(code)) {
+        if (!otp.getCode().equals(code)) {
             throw new BadRequestException("Invalid OTP");
         }
 
-        latestUnused.setUsed(true);
-        otpRepository.save(latestUnused);
+        otp.setUsed(true);
+        otpRepository.save(otp);
     }
+    public boolean isOtpValid(String email, String code, OtpPurpose purpose) {
+        List<Otp> allOtpsForThisEmail = otpRepository.findByEmailAndPurpose(email, purpose);
+        for (Otp otp : allOtpsForThisEmail) {
+            if (otp.isUsed()) {
+                continue;
+            }
+            if (Instant.now().isAfter(otp.getExpiresAt())) {
+                continue;
+            }
+            if (otp.getCode().equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }
