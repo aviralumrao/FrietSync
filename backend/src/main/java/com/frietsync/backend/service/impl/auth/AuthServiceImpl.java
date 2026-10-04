@@ -125,13 +125,11 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse refreshAccessToken(String refreshToken) {
-        UUID userId = refreshTokenService.getUserId(refreshToken);
+        UUID userId = refreshTokenService.useRefreshToken(refreshToken);
 
         if (userId == null) {
             throw new BadRequestException("Refresh token expired or revoked");
         }
-
-        refreshTokenService.delete(refreshToken);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BadRequestException("User not found"));

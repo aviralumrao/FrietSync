@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -53,5 +55,22 @@ public class RefreshTokenService {
         }
 
         redisTemplate.delete(userKey);
+    }
+    public UUID useRefreshToken(String token) {
+        String script =
+                "local userId = redis.call('GET', KEYS[1]) " +
+                        "if not userId then return nil end " +
+                        "redis.call('DEL', KEYS[1]) " +
+                        "redis.call('SREM', 'user-tokens:' .. userId, ARGV[1]) " +
+                        "return userId";
+
+        DefaultRedisScript<String> redisScript = new DefaultRedisScript<>(script, String.class);
+
+        String userId = redisTemplate.execute(redisScript, List.of("refresh:" + token), token);
+
+        if (userId == null) {
+            return null;
+        }
+        return UUID.fromString(userId);
     }
 }
