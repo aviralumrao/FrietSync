@@ -19,6 +19,7 @@ public class SprintResponse {
     private LocalDate startDate;
     private LocalDate endDate;
     private UUID createdBy;
+    private UUID assignedContributorId;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -33,6 +34,7 @@ public class SprintResponse {
         response.setStartDate(sprint.getStartDate());
         response.setEndDate(sprint.getEndDate());
         response.setCreatedBy(sprint.getCreatedBy());
+        response.setAssignedContributorId(sprint.getAssignedContributorId());
         response.setCreatedAt(sprint.getCreatedAt());
         response.setUpdatedAt(sprint.getUpdatedAt());
         return response;

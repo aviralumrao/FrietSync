@@ -1,6 +1,9 @@
 package com.frietsync.backend.controller.sprint;
 
+import com.frietsync.backend.dto.sprint.ApproveSprintAssignmentRequest;
+import com.frietsync.backend.dto.sprint.AssignSprintRequest;
 import com.frietsync.backend.dto.sprint.CreateSprintRequest;
+import com.frietsync.backend.dto.sprint.SprintAssignmentRequestResponse;
 import com.frietsync.backend.dto.sprint.SprintResponse;
 import com.frietsync.backend.dto.sprint.UpdateSprintRequest;
 import com.frietsync.backend.service.sprint.SprintService;
@@ -73,4 +76,38 @@ public class SprintController {
         sprintService.deleteSprint(id, currentUserId);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/sprints/{id}/assign")
+    public ResponseEntity<SprintResponse> assignSprint(
+            @PathVariable UUID id,
+            @Valid @RequestBody AssignSprintRequest request,
+            @AuthenticationPrincipal UUID currentUserId) {
+        return ResponseEntity.ok(sprintService.assignSprint(
+                id, request.getContributorId(), currentUserId));
+    }
+
+    @PostMapping("/sprints/{id}/request")
+    public ResponseEntity<SprintAssignmentRequestResponse> requestAssignment(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UUID currentUserId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(sprintService.requestAssignment(id, currentUserId));
+    }
+
+    @GetMapping("/projects/{id}/sprints-requests")
+    public ResponseEntity<List<SprintAssignmentRequestResponse>> listSprintRequests(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UUID currentUserId) {
+        return ResponseEntity.ok(sprintService.listSprintRequests(id, currentUserId));
+    }
+
+    @PostMapping("/sprints/{id}/sprints-requests")
+    public ResponseEntity<SprintAssignmentRequestResponse> approveRequest(
+            @PathVariable UUID id,
+            @Valid @RequestBody ApproveSprintAssignmentRequest request,
+            @AuthenticationPrincipal UUID currentUserId) {
+        return ResponseEntity.ok(sprintService.approveRequest(
+                id, request.getRequestId(), currentUserId));
+    }
+
 }
