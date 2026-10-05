@@ -12,4 +12,5 @@ public interface ProjectService {
     ProjectResponse get(UUID projectId, UUID userId);
     ProjectResponse update(UUID projectId, ProjectRequest request, UUID userId);
     void delete(UUID projectId, UUID userId);
+
 }
