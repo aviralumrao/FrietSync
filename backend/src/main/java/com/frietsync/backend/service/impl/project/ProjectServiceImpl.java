@@ -14,6 +14,7 @@ import com.frietsync.backend.service.project.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -75,8 +76,7 @@ public class ProjectServiceImpl implements ProjectService {
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
     }
     private boolean isInvolved(Project p, UUID userId) {
-        return Stream.of(p.getCreatedBy(), p.getAdminId(), p.getProjectManagerId(), p.getTeamLeadId())
-                .anyMatch(userId::equals);
+        return Arrays.asList(p.getCreatedBy(), p.getAdminId(), p.getProjectManagerId(), p.getTeamLeadId()).contains(userId);
     }
     private void apply(Project project, ProjectRequest request) {
         if (request.getStartDate() != null && request.getDeadline() != null

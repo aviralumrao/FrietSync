@@ -9,10 +9,10 @@ import java.util.UUID;
 
 public interface SprintService {
     SprintResponse createSprint(UUID projectId, CreateSprintRequest request, UUID currentUserId);
-    List<SprintResponse> listSprints(UUID projectId);
-    SprintResponse getSprint(UUID sprintId);
-    SprintResponse updateSprint(UUID sprintId, UpdateSprintRequest request);
-    SprintResponse startSprint(UUID sprintId);
-    SprintResponse completeSprint(UUID sprintId);
-    void deleteSprint(UUID sprintId);
+    List<SprintResponse> listSprints(UUID projectId, UUID currentUserId);
+    SprintResponse getSprint(UUID sprintId, UUID currentUserId);
+    SprintResponse updateSprint(UUID sprintId, UpdateSprintRequest request, UUID currentUserId);
+    SprintResponse startSprint(UUID sprintId, UUID currentUserId);
+    SprintResponse completeSprint(UUID sprintId, UUID currentUserId);
+    void deleteSprint(UUID sprintId, UUID currentUserId);
 }
