@@ -12,6 +12,7 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 
     @Query("select p from Project p where p.createdBy = :userId or p.adminId = :userId "
             + "or p.projectManagerId = :userId or p.teamLeadId = :userId "
+            + "or p.id in (select m.projectId from ProjectMember m where m.userId = :userId) "
             + "order by p.createdAt desc")
     List<Project> findAllForUser(@Param("userId") UUID userId);
 }
