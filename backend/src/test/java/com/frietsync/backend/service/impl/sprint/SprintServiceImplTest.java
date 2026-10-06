@@ -14,6 +14,7 @@ import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.repository.project.ProjectRepository;
+import com.frietsync.backend.repository.project.ProjectMemberRepository;
 import com.frietsync.backend.repository.sprint.SprintAssignmentRequestRepository;
 import com.frietsync.backend.repository.sprint.SprintRepository;
 import com.frietsync.backend.repository.user.UserRepository;
@@ -37,12 +38,14 @@ class SprintServiceImplTest {
 
     private final SprintRepository sprintRepository = mock(SprintRepository.class);
     private final ProjectRepository projectRepository = mock(ProjectRepository.class);
+    private final ProjectMemberRepository projectMemberRepository = mock(ProjectMemberRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final SprintAssignmentRequestRepository requestRepository =
             mock(SprintAssignmentRequestRepository.class);
     private final SprintServiceImpl sprintService = new SprintServiceImpl(
             sprintRepository,
             projectRepository,
+            projectMemberRepository,
             userRepository,
             requestRepository);
 
@@ -72,18 +75,23 @@ class SprintServiceImplTest {
         when(sprintRepository.save(any(Sprint.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(requestRepository.save(any(SprintAssignmentRequest.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        when(projectMemberRepository.existsByProjectIdAndUserId(projectId, contributorId)).thenReturn(true);
     }
 
     @Test
     void allowsProjectMemberToReadSprint() {
-        Project project = new Project();
-        project.setId(projectId);
-        project.setProjectManagerId(contributorId);
-        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(projectMemberRepository.existsByProjectIdAndUserId(projectId, contributorId)).thenReturn(true);
 
         SprintResponse response = sprintService.getSprint(sprintId, contributorId);
 
         assertEquals(sprintId, response.getId());
+    }
+
+    @Test
+    void rejectsNonMemberFromReadingSprint() {
+        when(projectMemberRepository.existsByProjectIdAndUserId(projectId, contributorId)).thenReturn(false);
+
+        assertThrows(ForbiddenException.class, () -> sprintService.getSprint(sprintId, contributorId));
     }
 
     @Test
@@ -112,6 +120,16 @@ class SprintServiceImplTest {
     }
 
     @Test
+    void rejectsAssigningContributorWhoIsNotAProjectMember() {
+        allowContributor(contributorId);
+        when(projectMemberRepository.existsByProjectIdAndUserId(projectId, contributorId)).thenReturn(false);
+
+        assertThrows(ForbiddenException.class,
+                () -> sprintService.assignSprint(sprintId, contributorId, managerId));
+        verify(sprintRepository, never()).save(any(Sprint.class));
+    }
+
+    @Test
     void allowsContributorToCreateAssignmentRequest() {
         allowContributor(contributorId);
         when(requestRepository.existsBySprintIdAndRequestedByAndStatus(
@@ -131,8 +149,28 @@ class SprintServiceImplTest {
     }
 
     @Test
+    void allowsContributorToRequestReassignmentOfAssignedSprint() {
+        UUID currentAssignee = UUID.randomUUID();
+        sprint.setAssignedContributorId(currentAssignee);
+        allowContributor(contributorId);
+        when(requestRepository.existsBySprintIdAndRequestedByAndStatus(
+                sprintId, contributorId, SprintAssignmentRequestStatus.PENDING)).thenReturn(false);
+        when(requestRepository.save(any(SprintAssignmentRequest.class))).thenAnswer(invocation -> {
+            SprintAssignmentRequest request = invocation.getArgument(0);
+            request.setId(UUID.randomUUID());
+            return request;
+        });
+
+        SprintAssignmentRequestResponse response = sprintService.requestAssignment(sprintId, contributorId);
+
+        assertEquals(SprintAssignmentRequestStatus.PENDING, response.getStatus());
+        assertEquals(currentAssignee, sprint.getAssignedContributorId());
+    }
+
+    @Test
     void approvesPendingAssignmentAndRejectsOtherRequests() {
         allowContributor(contributorId);
+        sprint.setAssignedContributorId(UUID.randomUUID());
         UUID requestId = UUID.randomUUID();
         SprintAssignmentRequest pending = new SprintAssignmentRequest();
         pending.setId(requestId);
@@ -165,6 +203,23 @@ class SprintServiceImplTest {
         request.setEndDate(LocalDate.of(2026, 10, 19));
 
         assertThrows(BadRequestException.class, () -> sprintService.createSprint(projectId, request, managerId));
+        verify(sprintRepository, never()).save(any(Sprint.class));
+    }
+
+    @Test
+    void rejectsCreateWhenSprintIsOutsideProjectDates() {
+        Project project = new Project();
+        project.setProjectManagerId(managerId);
+        project.setStartDate(LocalDate.of(2026, 10, 1));
+        project.setDeadline(LocalDate.of(2026, 10, 31));
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        CreateSprintRequest request = new CreateSprintRequest();
+        request.setName("Out of range");
+        request.setStartDate(LocalDate.of(2026, 9, 30));
+        request.setEndDate(LocalDate.of(2026, 10, 10));
+
+        assertThrows(BadRequestException.class,
+                () -> sprintService.createSprint(projectId, request, managerId));
         verify(sprintRepository, never()).save(any(Sprint.class));
     }
 

@@ -7,6 +7,7 @@ import com.frietsync.backend.dto.project.ProjectResponse;
 import com.frietsync.backend.entity.project.Project;
 import com.frietsync.backend.entity.project.ProjectMember;
 import com.frietsync.backend.entity.project.ProjectStatus;
+import com.frietsync.backend.entity.sprint.Sprint;
 import com.frietsync.backend.entity.user.Role;
 import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.exception.BadRequestException;
@@ -14,10 +15,13 @@ import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.repository.project.ProjectMemberRepository;
 import com.frietsync.backend.repository.project.ProjectRepository;
+import com.frietsync.backend.repository.sprint.SprintAssignmentRequestRepository;
+import com.frietsync.backend.repository.sprint.SprintRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.project.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Stream;
@@ -29,6 +33,8 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final SprintRepository sprintRepository;
+    private final SprintAssignmentRequestRepository sprintAssignmentRequestRepository;
 
     @Override
     public ProjectResponse create(ProjectRequest request, UUID userId) {
@@ -71,6 +77,8 @@ public class ProjectServiceImpl implements ProjectService {
         if (!userId.equals(project.getAdminId())) {
             throw new ForbiddenException("Only the admin can delete this project");
         }
+        sprintAssignmentRequestRepository.deleteAllForProject(projectId);
+        sprintRepository.deleteByProjectId(projectId);
         projectMemberRepository.deleteAll(projectMemberRepository.findByProjectId(projectId));
         projectRepository.delete(project);
     }
