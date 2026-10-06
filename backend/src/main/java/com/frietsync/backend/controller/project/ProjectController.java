@@ -1,5 +1,7 @@
 package com.frietsync.backend.controller.project;
 
+import com.frietsync.backend.dto.project.MemberRequest;
+import com.frietsync.backend.dto.project.MemberResponse;
 import com.frietsync.backend.dto.project.ProjectRequest;
 import com.frietsync.backend.dto.project.ProjectResponse;
 import com.frietsync.backend.service.project.ProjectService;
@@ -55,6 +57,27 @@ public class ProjectController {
     public ResponseEntity<Void> delete(@PathVariable UUID projectId,
                                        @AuthenticationPrincipal UUID userId) {
         projectService.delete(projectId, userId);
+        return ResponseEntity.noContent().build();
+    }
+    @GetMapping("/{projectId}/members")
+    public ResponseEntity<List<MemberResponse>> members(@PathVariable UUID projectId,
+                                                        @AuthenticationPrincipal UUID userId) {
+        return ResponseEntity.ok(projectService.getMembers(projectId, userId));
+    }
+
+    @PostMapping("/{projectId}/members")
+    public ResponseEntity<MemberResponse> addMember(@PathVariable UUID projectId,
+                                                    @Valid @RequestBody MemberRequest request,
+                                                    @AuthenticationPrincipal UUID userId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(projectService.addMember(projectId, request, userId));
+    }
+
+    @DeleteMapping("/{projectId}/members/{memberUserId}")
+    public ResponseEntity<Void> removeMember(@PathVariable UUID projectId,
+                                             @PathVariable UUID memberUserId,
+                                             @AuthenticationPrincipal UUID userId) {
+        projectService.removeMember(projectId, memberUserId, userId);
         return ResponseEntity.noContent().build();
     }
 }
