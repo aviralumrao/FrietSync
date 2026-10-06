@@ -28,6 +28,15 @@ public interface SprintAssignmentRequestRepository extends JpaRepository<SprintA
     void deleteBySprintId(UUID sprintId);
 
     @Modifying
+    @Query("delete from SprintAssignmentRequest request where request.requestedBy = :userId "
+            + "and request.status = :status and request.sprintId in "
+            + "(select sprint.id from Sprint sprint where sprint.projectId = :projectId)")
+    void deletePendingForProjectMember(
+            @Param("projectId") UUID projectId,
+            @Param("userId") UUID userId,
+            @Param("status") SprintAssignmentRequestStatus status);
+
+    @Modifying
     @Query("delete from SprintAssignmentRequest request where request.sprintId in "
             + "(select sprint.id from Sprint sprint where sprint.projectId = :projectId)")
     void deleteAllForProject(@Param("projectId") UUID projectId);

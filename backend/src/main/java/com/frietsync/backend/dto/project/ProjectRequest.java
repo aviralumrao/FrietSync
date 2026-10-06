@@ -27,6 +27,7 @@ public class ProjectRequest {
 
     private LocalDate deadline;
 
+    @NotBlank(message = "Project manager email is required")
     @Email(message = "Project manager email is not valid")
     private String projectManagerEmail;
 

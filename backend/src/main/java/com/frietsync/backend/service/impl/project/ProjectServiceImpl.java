@@ -7,7 +7,7 @@ import com.frietsync.backend.dto.project.ProjectResponse;
 import com.frietsync.backend.entity.project.Project;
 import com.frietsync.backend.entity.project.ProjectMember;
 import com.frietsync.backend.entity.project.ProjectStatus;
-import com.frietsync.backend.entity.sprint.Sprint;
+import com.frietsync.backend.entity.sprint.SprintAssignmentRequestStatus;
 import com.frietsync.backend.entity.user.Role;
 import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.exception.BadRequestException;
@@ -22,6 +22,7 @@ import com.frietsync.backend.service.project.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Stream;
@@ -43,6 +44,18 @@ public class ProjectServiceImpl implements ProjectService {
         project.setAdminId(userId);
         apply(project, request);
         return ProjectResponse.fromEntity(projectRepository.save(project));
+    }
+
+    private UUID findProjectManagerId(String email) {
+        if (email == null || email.isBlank()) {
+            throw new BadRequestException("Project manager email is required");
+        }
+        User manager = userRepository.findByEmail(email.trim())
+                .orElseThrow(() -> new BadRequestException("No user found with email: " + email));
+        if (manager.getRole() != Role.PROJECT_MANAGER) {
+            throw new BadRequestException("Selected user must have the PROJECT_MANAGER role");
+        }
+        return manager.getId();
     }
     @Override
     public List<ProjectResponse> myProjects(UUID userId) {
@@ -72,6 +85,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Transactional
     public void delete(UUID projectId, UUID userId) {
         Project project = find(projectId);
         if (!userId.equals(project.getAdminId())) {
@@ -112,7 +126,7 @@ public class ProjectServiceImpl implements ProjectService {
         } else {
             project.setCompleteDate(null);
         }
-        project.setProjectManagerId(findUserId(request.getProjectManagerEmail()));
+        project.setProjectManagerId(findProjectManagerId(request.getProjectManagerEmail()));
         project.setTeamLeadId(findUserId(request.getTeamLeadEmail()));
         updateTeamSize(project);
     }
@@ -146,8 +160,8 @@ public class ProjectServiceImpl implements ProjectService {
         if (!userId.equals(project.getAdminId())) {
             throw new ForbiddenException("Only the admin can add members");
         }
-        if (request.getRole() == Role.ADMIN) {
-            throw new BadRequestException("Project role cannot be ADMIN");
+        if (request.getRole() == Role.ADMIN || request.getRole() == Role.PROJECT_MANAGER) {
+            throw new BadRequestException("Project role cannot be ADMIN or PROJECT_MANAGER");
         }
         User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase())
                 .orElseThrow(() -> new BadRequestException("No user found with email: " + request.getEmail()));
@@ -167,6 +181,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Transactional
     public void removeMember(UUID projectId, UUID memberUserId, UUID userId) {
         Project project = find(projectId);
         if (!userId.equals(project.getAdminId())) {
@@ -174,6 +189,12 @@ public class ProjectServiceImpl implements ProjectService {
         }
         ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, memberUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Member not found in this project"));
+        if (sprintRepository.existsByProjectIdAndAssignedContributorId(projectId, memberUserId)) {
+            throw new BadRequestException(
+                    "Cannot remove a member while they are assigned to a sprint. Reassign the sprint first.");
+        }
+        sprintAssignmentRequestRepository.deletePendingForProjectMember(
+                projectId, memberUserId, SprintAssignmentRequestStatus.PENDING);
         projectMemberRepository.delete(member);
 
         updateTeamSize(project);

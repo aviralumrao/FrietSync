@@ -9,6 +9,7 @@ import com.frietsync.backend.entity.sprint.Sprint;
 import com.frietsync.backend.entity.sprint.SprintAssignmentRequest;
 import com.frietsync.backend.entity.sprint.SprintAssignmentRequestStatus;
 import com.frietsync.backend.entity.sprint.SprintStatus;
+import com.frietsync.backend.entity.project.ProjectMember;
 import com.frietsync.backend.entity.user.Role;
 import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.exception.BadRequestException;
@@ -44,9 +45,7 @@ public class SprintServiceImpl implements SprintService {
     public SprintResponse createSprint(UUID projectId, CreateSprintRequest request, UUID currentUserId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
-        if (currentUserId == null || !currentUserId.equals(project.getProjectManagerId())) {
-            throw new ForbiddenException("Only the project manager can perform this action");
-        }
+        requireProjectManager(project, currentUserId);
         checkDates(request.getStartDate(), request.getEndDate());
         checkDatesWithinProject(project, request.getStartDate(), request.getEndDate());
         Integer highestNumber = sprintRepository.findMaxSprintNumber(projectId);
@@ -111,7 +110,7 @@ public class SprintServiceImpl implements SprintService {
     @Transactional
     public SprintResponse startSprint(UUID sprintId, UUID currentUserId) {
         Sprint sprint = findSprintOrThrow(sprintId);
-        requireProjectManager(sprint.getProjectId(), currentUserId);
+        requireManagerOrAssignedContributor(sprint, currentUserId);
         if (sprint.getStatus() != SprintStatus.PLANNED) {
             throw new BadRequestException("Only a planned sprint can be started");
         }
@@ -125,7 +124,7 @@ public class SprintServiceImpl implements SprintService {
     @Transactional
     public SprintResponse completeSprint(UUID sprintId, UUID currentUserId) {
         Sprint sprint = findSprintOrThrow(sprintId);
-        requireProjectManager(sprint.getProjectId(), currentUserId);
+        requireManagerOrAssignedContributor(sprint, currentUserId);
         if (sprint.getStatus() != SprintStatus.ACTIVE) {
             throw new BadRequestException("Only an active sprint can be completed");
         }
@@ -221,9 +220,30 @@ public class SprintServiceImpl implements SprintService {
 
     private void requireProjectManager(UUID projectId, UUID userId) {
         Project project = findProjectOrThrow(projectId);
+        requireProjectManager(project, userId);
+    }
+
+    private void requireProjectManager(Project project, UUID userId) {
         if (userId == null || !userId.equals(project.getProjectManagerId())) {
             throw new ForbiddenException("Only the project manager can perform this action");
         }
+        User manager = userRepository.findById(userId)
+                .orElseThrow(() -> new ForbiddenException("Project manager is not a valid user"));
+        if (manager.getRole() != Role.PROJECT_MANAGER) {
+            throw new ForbiddenException("Project manager must have the PROJECT_MANAGER role");
+        }
+    }
+
+    private void requireManagerOrAssignedContributor(Sprint sprint, UUID userId) {
+        Project project = findProjectOrThrow(sprint.getProjectId());
+        if (userId != null && userId.equals(project.getProjectManagerId())) {
+            requireProjectManager(project, userId);
+            return;
+        }
+        if (userId == null || !userId.equals(sprint.getAssignedContributorId())) {
+            throw new ForbiddenException("Only the project manager or assigned contributor can update sprint status");
+        }
+        checkContributor(sprint.getProjectId(), userId);
     }
 
     private void checkMember(UUID projectId, UUID userId) {
@@ -247,7 +267,9 @@ public class SprintServiceImpl implements SprintService {
         if (contributor.getRole() != Role.CONTRIBUTOR) {
             throw new ForbiddenException("User is not a contributor");
         }
-        if (!projectMemberRepository.existsByProjectIdAndUserId(projectId, contributorId)) {
+        ProjectMember projectMember = projectMemberRepository.findByProjectIdAndUserId(projectId, contributorId)
+                .orElseThrow(() -> new ForbiddenException("Contributor is not a member of this project"));
+        if (projectMember.getRole() != Role.CONTRIBUTOR) {
             throw new ForbiddenException("Contributor is not a member of this project");
         }
     }

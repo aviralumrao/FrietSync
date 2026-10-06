@@ -11,6 +11,8 @@ import java.util.UUID;
 public interface SprintRepository extends JpaRepository<Sprint, UUID> {
     List<Sprint> findByProjectId(UUID projectId);
 
+    boolean existsByProjectIdAndAssignedContributorId(UUID projectId, UUID assignedContributorId);
+
     void deleteByProjectId(UUID projectId);
 
     @Query("select max(sprint.sprintNumber) from Sprint sprint where sprint.projectId = :projectId")
