@@ -123,7 +123,7 @@ public class InviteServiceImpl implements InviteService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BadRequestException("User not found"));
 
-        Invite invite = inviteRepository.findById(inviteId)
+        Invite invite = inviteRepository.findByIdForUpdate(inviteId)
                 .orElseThrow(() -> new BadRequestException("Invite not found"));
 
         if (!invite.getEmail().equalsIgnoreCase(user.getEmail())) {
@@ -155,7 +155,7 @@ public class InviteServiceImpl implements InviteService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BadRequestException("User not found"));
-        Invite invite = inviteRepository.findById(inviteId)
+        Invite invite = inviteRepository.findByIdForUpdate(inviteId)
                 .orElseThrow(() -> new BadRequestException("Invite not found"));
 
         if (!invite.getEmail().equalsIgnoreCase(user.getEmail())) {
@@ -175,8 +175,9 @@ public class InviteServiceImpl implements InviteService {
             throw new BadRequestException("inviteId is required");
         }
 
-        Invite invite = inviteRepository.findById(inviteId)
+        Invite invite = inviteRepository.findByIdForUpdate(inviteId)
                 .orElseThrow(() -> new BadRequestException("Invite not found"));
+
         ensurePendingAndNotExpired(invite);
 
         invite.setStatus(InviteStatus.REVOKED);

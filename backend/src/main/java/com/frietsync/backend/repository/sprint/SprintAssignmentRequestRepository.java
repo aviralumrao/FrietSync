@@ -2,7 +2,9 @@ package com.frietsync.backend.repository.sprint;
 
 import com.frietsync.backend.entity.sprint.SprintAssignmentRequest;
 import com.frietsync.backend.entity.sprint.SprintAssignmentRequestStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,10 @@ public interface SprintAssignmentRequestRepository extends JpaRepository<SprintA
             UUID sprintId,
             UUID requestedBy,
             SprintAssignmentRequestStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select request from SprintAssignmentRequest request where request.id = :requestId")
+    Optional<SprintAssignmentRequest> findByIdForUpdate(@Param("requestId") UUID requestId);
 
     List<SprintAssignmentRequest> findBySprintIdAndStatus(
             UUID sprintId,
