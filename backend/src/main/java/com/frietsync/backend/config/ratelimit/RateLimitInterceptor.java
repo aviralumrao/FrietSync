@@ -4,6 +4,8 @@ import com.frietsync.backend.service.impl.ratelimit.RateLimitService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -25,30 +27,99 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         }
 
         String path = request.getRequestURI();
-        String ip = request.getRemoteAddr();
+        String ip = getClientIp(request);
 
-        int limit = 10;
+        int ipLimit = getIpLimit(path);
 
-        if (path.equals("/api/v1/auth/signup") || path.equals("/api/v1/auth/forgot-password")) {
-            limit = 10;
-        } else if (path.equals("/api/v1/auth/login")) {
-            limit = 10;
-        } else if (path.equals("/api/v1/auth/refresh")) {
-            limit = 15;
-        } else if (path.equals("/api/v1/auth/logout")) {
-            limit = 10;
+        String ipKey = "rate:ip:" + ip + ":" + path;
+
+        if (!rateLimitService.isAllowed(
+                ipKey,
+                ipLimit,
+                Duration.ofMinutes(1)
+        )) {
+            return rateLimitExceeded(response);
         }
 
-        String key = "rate:" + ip + ":" + path;
-        boolean allowed = rateLimitService.isAllowed(key, limit, Duration.ofMinutes(1));
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
 
-        if (!allowed) {
-            response.setStatus(429);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"status\":429,\"message\":\"Too many requests, try again in a minute\"}");
-            return false;
+        if (authentication != null
+                && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getPrincipal())) {
+
+            String userId = authentication.getName();
+            int userLimit = getUserLimit(path);
+            String userKey = "rate:user:" + userId + ":" + path;
+
+            if (!rateLimitService.isAllowed(
+                    userKey,
+                    userLimit,
+                    Duration.ofMinutes(1)
+            )) {
+                return rateLimitExceeded(response);
+            }
         }
 
         return true;
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+
+        String ip = request.getHeader("X-Forwarded-For");
+
+        if (ip == null || ip.isBlank()) {
+            return request.getRemoteAddr();
+        }
+
+        return ip.split(",")[0].trim();
+    }
+
+    private int getIpLimit(String path) {
+
+        if (path.equals("/api/v1/auth/login")) {
+            return 10;
+        }
+
+        if (path.equals("/api/v1/auth/signup")
+                || path.equals("/api/v1/auth/forgot-password")) {
+            return 10;
+        }
+
+        if (path.equals("/api/v1/auth/refresh")) {
+            return 5;
+        }
+
+        if (path.equals("/api/v1/auth/logout")) {
+            return 10;
+        }
+
+        return 100;
+    }
+
+    private int getUserLimit(String path) {
+
+        if (path.equals("/api/v1/auth/refresh")) {
+            return 5;
+        }
+
+        if (path.equals("/api/v1/auth/logout")) {
+            return 10;
+        }
+
+        return 100;
+    }
+
+    private boolean rateLimitExceeded(HttpServletResponse response)
+            throws Exception {
+
+        response.setStatus(429);
+        response.setContentType("application/json");
+
+        response.getWriter().write(
+                "{\"status\":429,\"message\":\"Too many requests, try again in a minute\"}"
+        );
+
+        return false;
     }
 }
