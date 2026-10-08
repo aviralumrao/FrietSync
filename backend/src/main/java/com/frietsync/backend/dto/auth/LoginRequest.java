@@ -9,7 +9,7 @@ import lombok.Data;
 public class LoginRequest {
 
     @NotBlank
-    @Email
+    @Email(message = "Email must be a valid email address")
     private String email;
 
     @NotBlank

@@ -15,7 +15,11 @@ import lombok.NoArgsConstructor;
 public class SignupRequest {
 
     @NotBlank(message = "Name is required")
-    @Pattern(regexp = "^[\\p{L}]+$", message = "Name can contain letters only")
+    @Size(max = 100, message = "Name cannot exceed 100 characters")
+    @Pattern(
+            regexp = "^[A-Za-z]+(?:\\s+[A-Za-z]+)*$",
+            message = "Name can contain only letters and spaces"
+    )
     private String name;
 
     @NotBlank(message = "Email is required")
@@ -24,7 +28,9 @@ public class SignupRequest {
 
     @NotBlank(message = "Password is required")
     @Size(min = 6, max = 20, message = "Password must be between 6 and 20 characters")
-    @Pattern(regexp = "^[\\p{L}\\p{N}\\p{P}\\p{S}]+$",
-            message = "Password can contain letters, numbers, and symbols only")
+    @Pattern(
+            regexp = "^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[^A-Za-z\\d]).+$",
+            message = "Password must contain uppercase, lowercase, number and symbol"
+    )
     private String password;
 }

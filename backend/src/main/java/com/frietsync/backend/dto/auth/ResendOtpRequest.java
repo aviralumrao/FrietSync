@@ -8,6 +8,6 @@ import lombok.Data;
 public class ResendOtpRequest {
 
     @NotBlank
-    @Email
+    @Email(message = "Email must be a valid email address")
     private String email;
 }

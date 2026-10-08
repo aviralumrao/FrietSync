@@ -9,14 +9,15 @@ import java.time.LocalDate;
 @Data
 public class CreateSprintRequest {
 
-    @NotBlank
+    @NotBlank(message="Sprint must have a Name")
     private String name;
 
+    @NotNull
     private String goal;
 
-    @NotNull
+    @NotNull(message = "Start date is required")
     private LocalDate startDate;
 
-    @NotNull
+    @NotNull(message = "End date is required")
     private LocalDate endDate;
 }

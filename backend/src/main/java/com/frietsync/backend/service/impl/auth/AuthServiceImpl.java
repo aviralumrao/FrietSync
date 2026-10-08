@@ -39,7 +39,7 @@ public class AuthServiceImpl implements AuthService {
             String hashedPassword = passwordEncoder.encode(request.getPassword());
 
             User user = new User();
-            user.setName(request.getName());
+            user.setName(normalizeName(request.getName()));
             user.setEmail(email);
             user.setPasswordHash(hashedPassword);
             user.setRole(Role.ADMIN);
@@ -154,5 +154,12 @@ public class AuthServiceImpl implements AuthService {
 
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeName(String name) {
+        return Arrays.stream(name.trim().split("\\s+"))
+                .map(word -> Character.toUpperCase(word.charAt(0))
+                        + word.substring(1).toLowerCase())
+                .collect(Collectors.joining(" "));
     }
 }

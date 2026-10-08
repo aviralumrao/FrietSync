@@ -59,6 +59,7 @@ public class ProjectController {
         projectService.delete(projectId, userId);
         return ResponseEntity.noContent().build();
     }
+
     @GetMapping("/{projectId}/members")
     public ResponseEntity<List<MemberResponse>> members(@PathVariable UUID projectId,
                                                         @AuthenticationPrincipal UUID userId) {
