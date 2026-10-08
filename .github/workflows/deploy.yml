@@ -19,7 +19,7 @@ jobs:
           script: |
             set -e
 
-            cd /FrietSync
+            cd /home/ubuntu/FrietSync
 
             echo "Pulling latest code..."
             git fetch origin main
