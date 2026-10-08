@@ -24,7 +24,11 @@ public class ChatController {
     @GetMapping
     public List<ChatMessageResponse> recentMessages(
             @PathVariable UUID projectId,
-            @AuthenticationPrincipal UUID userId)
+            @AuthenticationPrincipal UUID userId,
+            @RequestParam(defaultValue = "50") int limit) {
+        if (limit < 1 || limit > 100) {
+            throw new BadRequestException("Message limit must be between 1 and 100");
+        }
         return chatService.getRecentMessages(projectId, userId, limit);
     }
 }

@@ -17,10 +17,21 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final ChatAuthChannelInterceptor chatAuthChannelInterceptor;
 
+    @Value("${app.cors.allowed-origins}")
+    private String allowedOriginsRaw;
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry registry) {
+        registry.enableSimpleBroker("/topic");
+        registry.setApplicationDestinationPrefixes("/app");
+    }
+
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
+                .setAllowedOrigins(allowedOriginsRaw.split(","));
     }
+
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(chatAuthChannelInterceptor);

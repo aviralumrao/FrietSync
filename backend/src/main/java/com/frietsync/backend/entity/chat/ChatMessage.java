@@ -15,9 +15,11 @@ import java.util.UUID;
 @Table(name = "chat_messages")
 public class ChatMessage extends BaseEntity {
 
+    @ManyToOne(fetch = FetchType.LAZY)
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
     @Column(name = "sender_id", nullable = false)
     private UUID senderId;
 
@@ -26,4 +28,15 @@ public class ChatMessage extends BaseEntity {
 
     @Column(nullable = false, length = 2000)
     private String content;
+
+    @CreationTimestamp
+    private Instant createdAt;
+
+    private Instant updatedAt;
+
+    private boolean deleted;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_id")
+    private ChatMessage replyTo;
 }

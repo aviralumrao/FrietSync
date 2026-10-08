@@ -12,7 +12,5 @@ public interface ChatService {
 
     List<ChatMessageResponse> getRecentMessages(UUID projectId, UUID userId, int limit);
 
-    List<UUID> getProjectParticipantIds(UUID projectId);
-
     void assertProjectAccess(UUID projectId, UUID userId);
 }

@@ -28,7 +28,6 @@ public class ChatMessageController {
                             Authentication authentication) {
         UUID senderId = (UUID) authentication.getPrincipal();
         ChatMessageResponse message = chatService.sendMessage(projectId, senderId, request);
-
-        }
+        messagingTemplate.convertAndSend("/topic/projects/" + projectId + "/chat", message);
     }
 }

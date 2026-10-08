@@ -12,9 +12,13 @@ import java.util.UUID;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> {
 
-    List<ChatMessage> findByProjectId(UUID projectId, Pageable pageable);
+    List<ChatMessage> findByProjectId(
+            UUID projectId,
+            Pageable pageable
+    );
+
 
     @Modifying
-    @Query("delete from ChatMessage message where message.projectId = :projectId")
+    @Query("delete from ChatMessage m where m.projectId = :projectId")
     void deleteByProjectId(@Param("projectId") UUID projectId);
 }
