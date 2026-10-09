@@ -44,6 +44,7 @@ public class AuthServiceImpl implements AuthService {
             user.setName(normalizeName(request.getName()));
             user.setEmail(email);
             user.setPasswordHash(hashedPassword);
+            user.setWorkspaceId(UUID.randomUUID());
             user.setRole(Role.ADMIN);
             user.setActive(false);
 

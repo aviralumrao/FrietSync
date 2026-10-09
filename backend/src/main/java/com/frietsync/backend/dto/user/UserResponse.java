@@ -18,6 +18,7 @@ import java.util.UUID;
 public class UserResponse {
 
     private UUID id;
+    private UUID workspaceId;
     private String name;
     private String email;
     private Role role;
@@ -28,6 +29,7 @@ public class UserResponse {
     public static UserResponse fromEntity(User user) {
         return UserResponse.builder()
                 .id(user.getId())
+                .workspaceId(user.getWorkspaceId())
                 .name(user.getName())
                 .email(user.getEmail())
                 .role(user.getRole())

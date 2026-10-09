@@ -12,11 +12,9 @@ import java.util.UUID;
 @Data
 public class InviteRequest {
 
-    @NotBlank(message = "Email is required")
     @Email(message = "Email must be a valid email address")
     private String email;
 
-    @NotNull(message = "Invite id is required")
     private UUID inviteId;
 
     private Instant expiresAt;

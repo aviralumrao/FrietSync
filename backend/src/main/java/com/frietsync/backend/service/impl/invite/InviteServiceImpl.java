@@ -43,20 +43,38 @@ public class InviteServiceImpl implements InviteService {
         if (request.getEmail() == null || request.getEmail().isBlank()) {
             throw new BadRequestException("Email is required");
         }
+
         Instant now = Instant.now();
         Instant expiresAt = request.getExpiresAt() == null
                 ? now.plus(INVITE_VALIDITY)
                 : request.getExpiresAt();
         if (!expiresAt.isAfter(now)) {
-            throw new BadRequestException("Invite expiration time must be in the future");
+            throw new BadRequestException(
+                    "Invite expiration time must be in the future"
+            );
         }
+
         if (request.getRole() == null || request.getRole() == Role.ADMIN) {
-            throw new BadRequestException("Invite role must be PROJECT_MANAGER, TEAM_LEAD, CONTRIBUTOR, or REPORTER");
+            throw new BadRequestException(
+                    "Invite role must be PROJECT_MANAGER, TEAM_LEAD, CONTRIBUTOR, or REPORTER"
+            );
         }
         String email = request.getEmail().trim().toLowerCase();
 
         User admin = userRepository.findById(adminId)
                 .orElseThrow(() -> new BadRequestException("Admin not found"));
+
+        if (admin.getRole() != Role.ADMIN) {
+            throw new BadRequestException(
+                    "Only admins can send invitations"
+            );
+        }
+        if (email.equalsIgnoreCase(admin.getEmail())) {
+            throw new BadRequestException(
+                    "You cannot invite yourself"
+            );
+        }
+        ensureWorkspaceId(admin);
 
         Invite invite = new Invite();
         invite.setEmail(email);
@@ -64,6 +82,8 @@ public class InviteServiceImpl implements InviteService {
         invite.setStatus(InviteStatus.PENDING);
         invite.setInvitedBy(admin.getId());
         invite.setExpiresAt(expiresAt);
+        invite.setWorkspaceId(admin.getWorkspaceId());
+
         inviteRepository.save(invite);
 
         emailService.sendInviteMail(email, invite.getRole().name());
@@ -107,6 +127,13 @@ public class InviteServiceImpl implements InviteService {
         r.setEmail(i.getEmail());
         r.setRole(i.getRole());
         r.setStatus(i.getStatus());
+
+        User inviter = userRepository.findById(i.getInvitedBy())
+                .orElseThrow(() -> new BadRequestException("Inviting user not found"));
+
+        r.setInvitedByName(inviter.getName());
+        r.setInvitedByEmail(inviter.getEmail());
+        r.setWorkspaceId(i.getWorkspaceId());
         r.setCreatedAt(i.getCreatedAt());
         r.setAcceptedAt(i.getAcceptedAt());
         r.setExpiresAt(getExpirationTime(i));
@@ -127,15 +154,27 @@ public class InviteServiceImpl implements InviteService {
                 .orElseThrow(() -> new BadRequestException("Invite not found"));
 
         if (!invite.getEmail().equalsIgnoreCase(user.getEmail())) {
-            throw new BadRequestException("This invite does not belong to your account");
+            throw new BadRequestException(
+                    "This invite does not belong to your account"
+            );
         }
+
         if (invite.getStatus() != InviteStatus.PENDING) {
             throw new BadRequestException("This invite is no longer pending");
         }
+
         if (isExpired(invite, Instant.now())) {
             throw new BadRequestException("This invite has expired");
         }
 
+        if (user.getWorkspaceId() != null
+                && !user.getWorkspaceId().equals(invite.getWorkspaceId())) {
+            throw new BadRequestException(
+                    "You are already a member of another workspace, Leave it to join this"
+            );
+        }
+
+        user.setWorkspaceId(invite.getWorkspaceId());
         user.setRole(invite.getRole());
         userRepository.save(user);
 
@@ -202,5 +241,12 @@ public class InviteServiceImpl implements InviteService {
         return invite.getExpiresAt() != null
                 ? invite.getExpiresAt()
                 : invite.getCreatedAt().plus(INVITE_VALIDITY);
+    }
+
+    private void ensureWorkspaceId(User user) {
+        if (user.getWorkspaceId() == null) {
+            user.setWorkspaceId(UUID.randomUUID());
+            userRepository.save(user);
+        }
     }
 }

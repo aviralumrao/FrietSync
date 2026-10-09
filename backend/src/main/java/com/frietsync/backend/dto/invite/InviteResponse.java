@@ -13,6 +13,9 @@ public class InviteResponse {
     private String email;
     private Role role;
     private InviteStatus status;
+    private String invitedByName;
+    private String invitedByEmail;
+    private UUID workspaceId;
     private Instant createdAt;
     private Instant acceptedAt;
     private Instant expiresAt;
