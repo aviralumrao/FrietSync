@@ -22,6 +22,7 @@ import com.frietsync.backend.service.project.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.frietsync.backend.entity.project.ProjectRole;
 
 import java.time.LocalDate;
 import java.util.*;
@@ -38,23 +39,36 @@ public class ProjectServiceImpl implements ProjectService {
     private final SprintAssignmentRequestRepository sprintAssignmentRequestRepository;
 
     @Override
+    @Transactional
     public ProjectResponse create(ProjectRequest request, UUID userId) {
+        User admin = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
         Project project = new Project();
         project.setCreatedBy(userId);
         project.setAdminId(userId);
         apply(project, request);
+        validateSameWorkspace(admin, project);
+
         return ProjectResponse.fromEntity(projectRepository.save(project));
     }
-
-    private UUID findProjectManagerId(String email) {
+    private void validateSameWorkspace(User user, Project project) {
+        if (project.getWorkspaceId() == null || user.getWorkspaceId() == null
+                || !project.getWorkspaceId().equals(user.getWorkspaceId())) {
+            throw new BadRequestException(
+                    "User " + user.getEmail() + " does not belong to this project's workspace");
+        }
+    }
+    private UUID findProjectManagerId(String email, Project project) {
         if (email == null || email.isBlank()) {
             throw new BadRequestException("Project manager email is required");
         }
-        User manager = userRepository.findByEmail(email.trim())
+        User manager = userRepository.findByEmail(email.trim().toLowerCase())
                 .orElseThrow(() -> new BadRequestException("No user found with email: " + email));
         if (manager.getRole() != Role.PROJECT_MANAGER) {
             throw new BadRequestException("Selected user must have the PROJECT_MANAGER role");
         }
+        validateSameWorkspace(manager, project);
         return manager.getId();
     }
     @Override
@@ -116,6 +130,8 @@ public class ProjectServiceImpl implements ProjectService {
         project.setWorkspaceId(request.getWorkspaceId());
         project.setStartDate(request.getStartDate());
         project.setDeadline(request.getDeadline());
+        project.setProjectManagerId(findProjectManagerId(request.getProjectManagerEmail(), project));
+        project.setTeamLeadId(findTeamLeadId(request.getTeamLeadEmail(), project));
         if (request.getStatus() != null) {
             project.setStatus(request.getStatus());
         }
@@ -126,17 +142,20 @@ public class ProjectServiceImpl implements ProjectService {
         } else {
             project.setCompleteDate(null);
         }
-        project.setProjectManagerId(findProjectManagerId(request.getProjectManagerEmail()));
-        project.setTeamLeadId(findUserId(request.getTeamLeadEmail()));
+
         updateTeamSize(project);
     }
-    private UUID findUserId(String email) {
+    private UUID findTeamLeadId(String email, Project project) {
         if (email == null || email.isBlank()) {
             return null;
         }
-        return userRepository.findByEmail(email.trim())
-                .map(User::getId)
+        User teamLead = userRepository.findByEmail(email.trim().toLowerCase())
                 .orElseThrow(() -> new BadRequestException("No user found with email: " + email));
+        if (teamLead.getRole() != Role.TEAM_LEAD) {
+            throw new BadRequestException("Selected user must have the TEAM_LEAD role");
+        }
+        validateSameWorkspace(teamLead, project);
+        return teamLead.getId();
     }
     @Override
     public List<MemberResponse> getMembers(UUID projectId, UUID userId) {
@@ -146,25 +165,42 @@ public class ProjectServiceImpl implements ProjectService {
         }
         List<MemberResponse> responses = new ArrayList<>();
         for (ProjectMember member : projectMemberRepository.findByProjectId(projectId)) {
-            User user = userRepository.findById(member.getUserId()).orElse(null);
-            if (user != null) {
-                responses.add(toMemberResponse(user, member.getRole()));
-            }
+            userRepository.findById(member.getUserId())
+                    .ifPresent(user -> responses.add(toMemberResponse(user, member.getProjectRole())));
         }
         return responses;
     }
 
     @Override
+    @Transactional
     public MemberResponse addMember(UUID projectId, MemberRequest request, UUID userId) {
         Project project = find(projectId);
         if (!userId.equals(project.getAdminId())) {
             throw new ForbiddenException("Only the admin can add members");
         }
-        if (request.getRole() == Role.ADMIN || request.getRole() == Role.PROJECT_MANAGER) {
-            throw new BadRequestException("Project role cannot be ADMIN or PROJECT_MANAGER");
+
+        ProjectRole role = request.getRole();
+        if (role == ProjectRole.ADMIN
+                || role == ProjectRole.PROJECT_MANAGER
+                || role == ProjectRole.TEAM_LEAD) {
+            throw new BadRequestException(
+                    "Role " + role + " is set in the project settings, not when adding a member");
         }
+
         User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase())
                 .orElseThrow(() -> new BadRequestException("No user found with email: " + request.getEmail()));
+
+        if (user.getId().equals(project.getAdminId())) {
+            throw new BadRequestException("The project admin cannot invite themselves to the project");
+        }
+
+        if (user.getId().equals(project.getProjectManagerId())
+                || user.getId().equals(project.getTeamLeadId())) {
+            throw new BadRequestException("User is already the project manager or team lead of this project");
+        }
+
+        validateSameWorkspace(user, project);
+
         if (projectMemberRepository.existsByProjectIdAndUserId(projectId, user.getId())) {
             throw new BadRequestException("User is already a member of this project");
         }
@@ -172,12 +208,12 @@ public class ProjectServiceImpl implements ProjectService {
         ProjectMember member = new ProjectMember();
         member.setProjectId(projectId);
         member.setUserId(user.getId());
-        member.setRole(request.getRole());
+        member.setProjectRole(role);
         projectMemberRepository.save(member);
 
         updateTeamSize(project);
         projectRepository.save(project);
-        return toMemberResponse(user, member.getRole());
+        return toMemberResponse(user, role);
     }
 
     @Override
@@ -201,7 +237,7 @@ public class ProjectServiceImpl implements ProjectService {
         projectRepository.save(project);
     }
 
-    private MemberResponse toMemberResponse(User user, Role role) {
+    private MemberResponse toMemberResponse(User user, ProjectRole role) {
         MemberResponse response = new MemberResponse();
         response.setUserId(user.getId());
         response.setName(user.getName());

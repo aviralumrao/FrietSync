@@ -167,7 +167,7 @@
 
 					<consoleOutput>true</consoleOutput>
 					<violationSeverity>warning</violationSeverity>
-					<failOnViolation>false</failOnViolation>
+					<failOnViolation>true</failOnViolation>
 					<includeTestSourceDirectory>true</includeTestSourceDirectory>
 				</configuration>
 				<executions>

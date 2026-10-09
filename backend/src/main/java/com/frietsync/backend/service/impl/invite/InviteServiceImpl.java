@@ -63,6 +63,9 @@ public class InviteServiceImpl implements InviteService {
 
         User admin = userRepository.findById(adminId)
                 .orElseThrow(() -> new BadRequestException("Admin not found"));
+        if (admin.getEmail().equalsIgnoreCase(email)) {
+            throw new BadRequestException("You cannot invite yourself");
+        }
 
         if (admin.getRole() != Role.ADMIN) {
             throw new BadRequestException(

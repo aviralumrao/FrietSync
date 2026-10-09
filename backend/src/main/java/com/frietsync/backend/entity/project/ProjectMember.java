@@ -1,7 +1,6 @@
 package com.frietsync.backend.entity.project;
 
 import com.frietsync.backend.entity.common.BaseEntity;
-import com.frietsync.backend.entity.user.Role;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -27,6 +26,6 @@ public class ProjectMember extends BaseEntity {
     private UUID userId;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Role role;
+    @Column(name = "role", nullable = false)
+    private ProjectRole projectRole;
 }

@@ -272,9 +272,7 @@ public class SprintServiceImpl implements SprintService {
         }
         ProjectMember projectMember = projectMemberRepository.findByProjectIdAndUserId(projectId, contributorId)
                 .orElseThrow(() -> new ForbiddenException("Contributor is not a member of this project"));
-        if (projectMember.getRole() != Role.CONTRIBUTOR) {
-            throw new ForbiddenException("Contributor is not a member of this project");
-        }
+
     }
 
     private void checkDates(LocalDate startDate, LocalDate endDate) {
