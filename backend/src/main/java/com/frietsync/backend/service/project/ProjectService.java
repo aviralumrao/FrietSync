@@ -1,7 +1,8 @@
 package com.frietsync.backend.service.project;
 
-import com.frietsync.backend.dto.project.MemberRequest;
 import com.frietsync.backend.dto.project.MemberResponse;
+import com.frietsync.backend.dto.project.ProjectInviteRequest;
+import com.frietsync.backend.dto.invite.InviteResponse;
 import com.frietsync.backend.dto.project.ProjectRequest;
 import com.frietsync.backend.dto.project.ProjectResponse;
 
@@ -15,7 +16,7 @@ public interface ProjectService {
     ProjectResponse update(UUID projectId, ProjectRequest request, UUID userId);
     void delete(UUID projectId, UUID userId);
     List<MemberResponse> getMembers(UUID projectId, UUID userId);
-    MemberResponse addMember(UUID projectId, MemberRequest request, UUID userId);
+    InviteResponse inviteMember(UUID projectId, ProjectInviteRequest request, UUID userId);
     void removeMember(UUID projectId, UUID memberUserId, UUID userId);
 
 }

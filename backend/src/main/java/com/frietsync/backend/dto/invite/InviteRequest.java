@@ -26,4 +26,6 @@ public class InviteRequest {
 
     @NotNull
     private InvitePurpose purpose;
+
+    private UUID projectId;
 }

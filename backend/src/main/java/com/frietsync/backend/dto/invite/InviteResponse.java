@@ -17,6 +17,7 @@ public class InviteResponse {
     private String invitedByName;
     private String invitedByEmail;
     private UUID workspaceId;
+    private UUID projectId;
     private Instant createdAt;
     private Instant acceptedAt;
     private Instant expiresAt;

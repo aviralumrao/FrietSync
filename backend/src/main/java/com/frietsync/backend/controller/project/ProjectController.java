@@ -1,7 +1,8 @@
 package com.frietsync.backend.controller.project;
 
-import com.frietsync.backend.dto.project.MemberRequest;
 import com.frietsync.backend.dto.project.MemberResponse;
+import com.frietsync.backend.dto.project.ProjectInviteRequest;
+import com.frietsync.backend.dto.invite.InviteResponse;
 import com.frietsync.backend.dto.project.ProjectRequest;
 import com.frietsync.backend.dto.project.ProjectResponse;
 import com.frietsync.backend.service.project.ProjectService;
@@ -67,11 +68,11 @@ public class ProjectController {
     }
 
     @PostMapping("/{projectId}/members")
-    public ResponseEntity<MemberResponse> addMember(@PathVariable UUID projectId,
-                                                    @Valid @RequestBody MemberRequest request,
-                                                    @AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<InviteResponse> inviteMember(@PathVariable UUID projectId,
+                                                       @Valid @RequestBody ProjectInviteRequest request,
+                                                       @AuthenticationPrincipal UUID userId) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(projectService.addMember(projectId, request, userId));
+                .body(projectService.inviteMember(projectId, request, userId));
     }
 
     @DeleteMapping("/{projectId}/members/{memberUserId}")

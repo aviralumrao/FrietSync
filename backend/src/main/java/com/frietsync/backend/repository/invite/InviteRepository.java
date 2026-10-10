@@ -1,7 +1,9 @@
 package com.frietsync.backend.repository.invite;
 
 import com.frietsync.backend.entity.invite.Invite;
+import com.frietsync.backend.entity.invite.InvitePurpose;
 import com.frietsync.backend.entity.invite.InviteStatus;
+import com.frietsync.backend.entity.user.Role;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -19,4 +21,17 @@ public interface InviteRepository extends JpaRepository<Invite, UUID> {
     Optional<Invite> findByIdForUpdate(@Param("inviteId") UUID inviteId);
 
     List<Invite> findByEmailAndStatusOrderByCreatedAtDesc(String email, InviteStatus status);
+
+    boolean existsByProjectIdAndEmailIgnoreCaseAndStatus(
+            UUID projectId,
+            String email,
+            InviteStatus status
+    );
+
+    List<Invite> findByProjectIdAndRoleAndPurposeAndStatus(
+            UUID projectId,
+            Role role,
+            InvitePurpose purpose,
+            InviteStatus status
+    );
 }

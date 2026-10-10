@@ -5,11 +5,16 @@ import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.service.email.EmailService;
 import com.frietsync.backend.dto.invite.InviteRequest;
 import com.frietsync.backend.dto.invite.InviteResponse;
+import com.frietsync.backend.dto.project.ProjectInviteRequest;
 import com.frietsync.backend.entity.invite.Invite;
 import com.frietsync.backend.entity.invite.InvitePurpose;
 import com.frietsync.backend.entity.invite.InviteStatus;
+import com.frietsync.backend.entity.project.Project;
+import com.frietsync.backend.entity.project.ProjectMember;
 import com.frietsync.backend.entity.workspace.Workspace;
 import com.frietsync.backend.repository.invite.InviteRepository;
+import com.frietsync.backend.repository.project.ProjectMemberRepository;
+import com.frietsync.backend.repository.project.ProjectRepository;
 import com.frietsync.backend.repository.workspace.WorkspaceRepository;
 import com.frietsync.backend.service.invite.InviteService;
 import com.frietsync.backend.entity.user.User;
@@ -21,7 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -32,21 +39,47 @@ public class InviteServiceImpl implements InviteService {
     private final InviteRepository inviteRepository;
     private final UserRepository userRepository;
     private final WorkspaceRepository workspaceRepository;
+    private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final EmailService emailService;
 
     public InviteServiceImpl(InviteRepository inviteRepository,
                              UserRepository userRepository,
                              WorkspaceRepository workspaceRepository,
+                             ProjectRepository projectRepository,
+                             ProjectMemberRepository projectMemberRepository,
                              EmailService emailService) {
         this.inviteRepository = inviteRepository;
         this.userRepository = userRepository;
         this.workspaceRepository = workspaceRepository;
+        this.projectRepository = projectRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.emailService = emailService;
     }
 
     @Override
     @Transactional
     public InviteResponse createInvite(InviteRequest request, UUID adminId) {
+        return createInvite(request, adminId, false);
+    }
+
+    @Override
+    @Transactional
+    public InviteResponse createProjectInvite(
+            UUID projectId,
+            ProjectInviteRequest projectInviteRequest,
+            UUID adminId
+    ) {
+        InviteRequest request = new InviteRequest();
+        request.setEmail(projectInviteRequest.getEmail());
+        request.setRole(projectInviteRequest.getRole());
+        request.setPurpose(InvitePurpose.PROJECT_INVITE);
+        request.setProjectId(projectId);
+        request.setExpiresAt(projectInviteRequest.getExpiresAt());
+        return createInvite(request, adminId, true);
+    }
+
+    private InviteResponse createInvite(InviteRequest request, UUID adminId, boolean allowProjectInvite) {
         if (request.getEmail() == null || request.getEmail().isBlank()) {
             throw new BadRequestException("Email is required");
         }
@@ -92,7 +125,15 @@ public class InviteServiceImpl implements InviteService {
             throw new BadRequestException("Invite purpose is required");
         }
 
-        if (purpose == InvitePurpose.WORKSPACE_INVITE) {
+        UUID projectId = null;
+        if (purpose == InvitePurpose.PROJECT_INVITE) {
+            if (!allowProjectInvite) {
+                throw new BadRequestException("Project invites must use the project member invite endpoint");
+            }
+            projectId = validateProjectInvite(request, admin, email, now);
+        } else if (request.getProjectId() != null) {
+            throw new BadRequestException("Project ID is only valid for project invites");
+        } else if (purpose == InvitePurpose.WORKSPACE_INVITE) {
             if (request.getRole() == null || request.getRole() == Role.ADMIN) {
                 throw new BadRequestException(
                         "Invite role must be PROJECT_MANAGER, TEAM_LEAD, CONTRIBUTOR, or REPORTER"
@@ -130,6 +171,7 @@ public class InviteServiceImpl implements InviteService {
         invite.setInvitedBy(admin.getId());
         invite.setExpiresAt(expiresAt);
         invite.setWorkspaceId(admin.getWorkspaceId());
+        invite.setProjectId(projectId);
 
         inviteRepository.save(invite);
 
@@ -144,6 +186,53 @@ public class InviteServiceImpl implements InviteService {
         return toResponse(invite);
     }
 
+    private UUID validateProjectInvite(
+            InviteRequest request,
+            User admin,
+            String email,
+            Instant now
+    ) {
+        UUID projectId = request.getProjectId();
+        if (projectId == null) {
+            throw new BadRequestException("Project ID is required for a project invite");
+        }
+        Project project = projectRepository.findByIdForUpdate(projectId)
+                .orElseThrow(() -> new BadRequestException("Project not found"));
+        if (!admin.getId().equals(project.getAdminId())) {
+            throw new ForbiddenException("Only the project admin can invite project members");
+        }
+        if (project.getWorkspaceId() == null
+                || !project.getWorkspaceId().equals(admin.getWorkspaceId())
+                || !project.getAdminId().equals(admin.getId())) {
+            throw new BadRequestException("Project admin must be the workspace admin");
+        }
+        if (request.getRole() == null || request.getRole() == Role.ADMIN) {
+            throw new BadRequestException("Unsupported project invite role");
+        }
+        User invitee = userRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new BadRequestException("Project invitee must already have an account"));
+        if (!project.getWorkspaceId().equals(invitee.getWorkspaceId())) {
+            throw new BadRequestException("Project invitee must belong to the project's workspace");
+        }
+        if (invitee.getRole() != request.getRole()) {
+            throw new BadRequestException("Invite role must match the invitee's global role");
+        }
+        if (invitee.getId().equals(project.getAdminId())) {
+            throw new BadRequestException("Workspace admin is already the project admin");
+        }
+        if (projectMemberRepository.existsByProjectIdAndUserId(projectId, invitee.getId())
+                || invitee.getId().equals(project.getProjectManagerId())
+                || invitee.getId().equals(project.getTeamLeadId())) {
+            throw new BadRequestException("User is already a member of this project");
+        }
+        if (inviteRepository.existsByProjectIdAndEmailIgnoreCaseAndStatus(
+                projectId, email, InviteStatus.PENDING)) {
+            throw new BadRequestException("A pending invite already exists for this project member");
+        }
+        ensureProjectRoleAvailable(project, request.getRole(), invitee.getId());
+        ensureNoPendingLeadershipInvite(projectId, request.getRole(), now);
+        return projectId;
+    }
 
     @Override
     @Transactional
@@ -187,6 +276,7 @@ public class InviteServiceImpl implements InviteService {
             r.setInvitedByEmail(inviter.getEmail());
         });
         r.setWorkspaceId(i.getWorkspaceId());
+        r.setProjectId(i.getProjectId());
         r.setCreatedAt(i.getCreatedAt());
         r.setAcceptedAt(i.getAcceptedAt());
         r.setExpiresAt(getExpirationTime(i));
@@ -222,7 +312,57 @@ public class InviteServiceImpl implements InviteService {
 
         switch (invite.getPurpose()) {
             case PROJECT_INVITE -> {
-                return toResponse(invite);
+                if (invite.getProjectId() == null || invite.getRole() == null) {
+                    throw new BadRequestException("Project invite details are missing");
+                }
+                Project project = projectRepository.findByIdForUpdate(invite.getProjectId())
+                        .orElseThrow(() -> new BadRequestException("Project not found"));
+                if (!project.getWorkspaceId().equals(user.getWorkspaceId())
+                        || !project.getWorkspaceId().equals(invite.getWorkspaceId())) {
+                    throw new BadRequestException("You must belong to the project's workspace");
+                }
+                Workspace workspace = workspaceRepository.findById(project.getWorkspaceId())
+                        .orElseThrow(() -> new BadRequestException("Project workspace not found"));
+                if (!workspace.getAdminId().equals(project.getAdminId())) {
+                    throw new BadRequestException("Project admin must be the workspace admin");
+                }
+                if (user.getRole() != invite.getRole()) {
+                    throw new BadRequestException("Your global role does not match this project invite");
+                }
+                if (invite.getRole() == Role.ADMIN || userId.equals(project.getAdminId())) {
+                    throw new BadRequestException("Workspace admin is the only project admin");
+                }
+                if (projectMemberRepository.existsByProjectIdAndUserId(project.getId(), userId)
+                        || userId.equals(project.getProjectManagerId())
+                        || userId.equals(project.getTeamLeadId())) {
+                    throw new BadRequestException("User is already a member of this project");
+                }
+                ensureProjectRoleAvailable(project, invite.getRole(), userId);
+
+                if (invite.getRole() == Role.PROJECT_MANAGER) {
+                    project.setProjectManagerId(userId);
+                } else if (invite.getRole() == Role.TEAM_LEAD) {
+                    project.setTeamLeadId(userId);
+                } else {
+                    ProjectMember member = new ProjectMember();
+                    member.setProjectId(project.getId());
+                    member.setUserId(userId);
+                    member.setRole(invite.getRole());
+                    projectMemberRepository.save(member);
+                }
+
+                Set<UUID> projectUsers = new HashSet<>();
+                projectUsers.add(project.getAdminId());
+                if (project.getProjectManagerId() != null) {
+                    projectUsers.add(project.getProjectManagerId());
+                }
+                if (project.getTeamLeadId() != null) {
+                    projectUsers.add(project.getTeamLeadId());
+                }
+                projectMemberRepository.findByProjectId(project.getId())
+                        .forEach(member -> projectUsers.add(member.getUserId()));
+                project.setTeamSize(projectUsers.size());
+                projectRepository.save(project);
             }
 
             case WORKSPACE_INVITE -> {
@@ -256,6 +396,7 @@ public class InviteServiceImpl implements InviteService {
 
                 workspace.setAdminId(userId);
                 workspaceRepository.save(workspace);
+                projectRepository.updateAdminIdByWorkspaceId(invite.getWorkspaceId(), userId);
                 currentOwner.setRole(Role.CONTRIBUTOR);
                 userRepository.save(currentOwner);
                 user.setRole(Role.ADMIN);
@@ -330,6 +471,43 @@ public class InviteServiceImpl implements InviteService {
         return invite.getExpiresAt() != null
                 ? invite.getExpiresAt()
                 : invite.getCreatedAt().plus(INVITE_VALIDITY);
+    }
+
+    private void ensureProjectRoleAvailable(Project project, Role role, UUID inviteeId) {
+        if (role == Role.PROJECT_MANAGER
+                && project.getProjectManagerId() != null
+                && !project.getProjectManagerId().equals(inviteeId)) {
+            throw new BadRequestException("This project already has a project manager");
+        }
+        if (role == Role.TEAM_LEAD
+                && project.getTeamLeadId() != null
+                && !project.getTeamLeadId().equals(inviteeId)) {
+            throw new BadRequestException("This project already has a team lead");
+        }
+        if ((role == Role.PROJECT_MANAGER || role == Role.TEAM_LEAD)
+                && projectMemberRepository.findByProjectId(project.getId()).stream()
+                .anyMatch(member -> member.getRole() == role && !member.getUserId().equals(inviteeId))) {
+            throw new BadRequestException("This project already has a member with that leadership role");
+        }
+    }
+
+    private void ensureNoPendingLeadershipInvite(UUID projectId, Role role, Instant now) {
+        if (role != Role.PROJECT_MANAGER && role != Role.TEAM_LEAD) {
+            return;
+        }
+        boolean hasPendingInvite = false;
+        for (Invite pendingInvite : inviteRepository.findByProjectIdAndRoleAndPurposeAndStatus(
+                projectId, role, InvitePurpose.PROJECT_INVITE, InviteStatus.PENDING)) {
+            if (isExpired(pendingInvite, now)) {
+                pendingInvite.setStatus(InviteStatus.EXPIRED);
+                inviteRepository.save(pendingInvite);
+            } else {
+                hasPendingInvite = true;
+            }
+        }
+        if (hasPendingInvite) {
+            throw new BadRequestException("A pending invite already exists for this project leadership role");
+        }
     }
 
 }

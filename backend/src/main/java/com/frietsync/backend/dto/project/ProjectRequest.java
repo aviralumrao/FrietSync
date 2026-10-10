@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDate;
-import java.util.UUID;
 
 @Data
 public class ProjectRequest {
@@ -19,15 +18,12 @@ public class ProjectRequest {
     @Size(max = 1000, message = "Description must be at most 1000 characters")
     private String description;
 
-    private UUID workspaceId;
-
     private ProjectStatus status;
 
     private LocalDate startDate;
 
     private LocalDate deadline;
 
-    @NotBlank(message = "Project manager email is required")
     @Email(message = "Project manager email is not valid")
     private String projectManagerEmail;
 
