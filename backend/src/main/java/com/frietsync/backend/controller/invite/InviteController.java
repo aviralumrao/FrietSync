@@ -1,7 +1,8 @@
 package com.frietsync.backend.controller.invite;
 
-import com.frietsync.backend.dto.invite.InviteRequest;
+import com.frietsync.backend.dto.invite.InviteActionRequest;
 import com.frietsync.backend.dto.invite.InviteResponse;
+import com.frietsync.backend.dto.invite.InviteRequest;
 import com.frietsync.backend.service.invite.InviteService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -37,21 +38,24 @@ public class InviteController {
     }
 
     @PostMapping("/invites/accept")
-    public ResponseEntity<InviteResponse> accept(@Valid @RequestBody InviteRequest request,
+    public ResponseEntity<InviteResponse> accept(@Valid @RequestBody InviteActionRequest request,
                                                  Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         return ResponseEntity.ok(inviteService.acceptInvite(userId, request.getInviteId()));
     }
 
     @PostMapping("/invites/reject")
-    public ResponseEntity<InviteResponse> reject(@Valid @RequestBody InviteRequest request,
+    public ResponseEntity<InviteResponse> reject(@Valid @RequestBody InviteActionRequest request,
                                                  Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         return ResponseEntity.ok(inviteService.rejectInvite(userId, request.getInviteId()));
     }
 
     @PostMapping("/admin/invites/revoke")
-    public ResponseEntity<InviteResponse> revoke(@Valid @RequestBody InviteRequest request) {
-        return ResponseEntity.ok(inviteService.revokeInvite(request.getInviteId()));
+    public ResponseEntity<InviteResponse> revoke(
+            @Valid @RequestBody InviteActionRequest request,
+            Authentication authentication) {
+        UUID adminId = UUID.fromString(authentication.getName());
+        return ResponseEntity.ok(inviteService.revokeInvite(adminId, request.getInviteId()));
     }
 }
