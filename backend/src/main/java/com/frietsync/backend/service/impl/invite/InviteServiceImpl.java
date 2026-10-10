@@ -207,8 +207,11 @@ public class InviteServiceImpl implements InviteService {
                 .orElseThrow(() -> new BadRequestException("Invite not found"));
 
         if (!invite.getEmail().equalsIgnoreCase(user.getEmail())) {
-            throw new BadRequestException("This invite does not belong to your account");
+            throw new BadRequestException(
+                    "This invite does not belong to your account"
+            );
         }
+
         if (invite.getStatus() != InviteStatus.PENDING) {
             throw new BadRequestException("This invite is no longer pending");
         }
