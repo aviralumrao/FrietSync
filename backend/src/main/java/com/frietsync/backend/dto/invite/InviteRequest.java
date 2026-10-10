@@ -14,7 +14,7 @@ import java.util.UUID;
 @Data
 public class InviteRequest {
 
-    @NotBlank
+
     @Email(message = "Email must be a valid email address")
     private String email;
 
