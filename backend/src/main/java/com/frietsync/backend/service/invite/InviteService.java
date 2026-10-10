@@ -11,5 +11,5 @@ public interface InviteService {
     List<InviteResponse> myPendingInvites(UUID userId);
     InviteResponse acceptInvite(UUID userId, UUID inviteId);
     InviteResponse rejectInvite(UUID userId, UUID inviteId);
-    InviteResponse revokeInvite(UUID inviteId);
+    InviteResponse revokeInvite(UUID adminId, UUID inviteId);
 }

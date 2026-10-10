@@ -1,9 +1,13 @@
 package com.frietsync.backend.entity.invite;
 
 import com.frietsync.backend.entity.common.BaseEntity;
-import com.frietsync.backend.entity.invite.InviteStatus;
 import com.frietsync.backend.entity.user.Role;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -24,6 +28,10 @@ public class Invite extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "purpose", nullable = false)
+    private InvitePurpose purpose;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
