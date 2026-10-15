@@ -2,6 +2,7 @@ package com.frietsync.backend.service.impl.poll;
 
 import com.frietsync.backend.dto.poll.CreatePollRequest;
 import com.frietsync.backend.dto.poll.PollResponse;
+import com.frietsync.backend.dto.poll.PollUpdateEvent;
 import com.frietsync.backend.dto.poll.VoteRequest;
 import com.frietsync.backend.entity.poll.Poll;
 import com.frietsync.backend.entity.poll.PollMode;
@@ -26,8 +27,11 @@ import com.frietsync.backend.repository.sprint.SprintRepository;
 import com.frietsync.backend.service.poll.PollService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -48,6 +52,7 @@ public class PollServiceImpl implements PollService {
     private final SprintRepository sprintRepository;
     private final IssueRepository issueRepository;
     private final MilestoneRepository milestoneRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Override
     @Transactional
@@ -55,7 +60,7 @@ public class PollServiceImpl implements PollService {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
         requireMember(project, userId);
-        if (request.getClosesAt() != null && !request.getClosesAt().isAfter(Instant.now())) {
+        if (request.getEndsAt() != null && !request.getEndsAt().isAfter(Instant.now())) {
             throw new BadRequestException("Poll deadline must be in the future");
         }
         int linkedObjectCount = (request.getIssueId() == null ? 0 : 1)
@@ -100,7 +105,7 @@ public class PollServiceImpl implements PollService {
         poll.setIssueId(request.getIssueId());
         poll.setSprintId(request.getSprintId());
         poll.setMilestoneId(request.getMilestoneId());
-        poll.setClosesAt(request.getClosesAt());
+        poll.setEndsAt(request.getEndsAt());
         poll = pollRepository.save(poll);
         List<PollOption> options = new ArrayList<>();
         for (int index = 0; index < request.getOptions().size(); index++) {
@@ -110,7 +115,9 @@ public class PollServiceImpl implements PollService {
             option.setOptionOrder(index);
             options.add(optionRepository.save(option));
         }
-        return response(poll, userId);
+        PollResponse result = response(poll, userId);
+        publishAfterCommit("POLL_CREATED", result);
+        return result;
     }
 
     @Override
@@ -138,7 +145,10 @@ public class PollServiceImpl implements PollService {
         Poll poll = pollRepository.findByIdForUpdate(pollId)
                 .orElseThrow(() -> new ResourceNotFoundException("Poll not found"));
         requireMember(findProject(poll.getProjectId()), userId);
-        poll = closeIfExpired(poll);
+        if (poll.getStatus() == PollStatus.OPEN && poll.getEndsAt() != null
+                && !Instant.now().isBefore(poll.getEndsAt())) {
+            throw new BadRequestException("This poll has expired");
+        }
         requireOpen(poll);
         List<PollOption> options = optionRepository.findByPollIdOrderByOptionOrder(pollId);
         Set<UUID> validIds = new HashSet<>();
@@ -175,7 +185,9 @@ public class PollServiceImpl implements PollService {
             vote.setUserId(userId);
             voteRepository.save(vote);
         }
-        return response(poll, userId);
+        PollResponse result = response(poll, userId);
+        publishAfterCommit("POLL_UPDATED", result);
+        return result;
     }
 
     @Override
@@ -192,6 +204,7 @@ public class PollServiceImpl implements PollService {
         if (poll.getStatus() == PollStatus.OPEN) {
             poll.setDecisionRecord(trimToNull(decisionRecord));
             closePoll(poll);
+            publishAfterCommit("POLL_CLOSED", response(poll, userId));
         } else if (decisionRecord != null && !decisionRecord.isBlank()) {
             throw new BadRequestException("A closed poll decision record cannot be changed");
         }
@@ -203,26 +216,27 @@ public class PollServiceImpl implements PollService {
     public void closeExpiredPolls() {
         Instant now = Instant.now();
         List<Poll> expiredPolls = pollRepository
-                .findTop100ByStatusAndClosesAtLessThanEqualOrderByClosesAtAsc(PollStatus.OPEN, now);
+                .findByStatusAndEndsAtLessThanEqual(PollStatus.OPEN, now);
         for (Poll expiredPoll : expiredPolls) {
-            var lockedPollResult = pollRepository.findByIdForUpdate(expiredPoll.getId());
-            if (lockedPollResult.isEmpty()) {
-                continue;
-            }
-            Poll poll = lockedPollResult.get();
-            if (poll.getStatus() == PollStatus.OPEN
-                    && poll.getClosesAt() != null
-                    && !poll.getClosesAt().isAfter(now)) {
+            var pollResult = pollRepository.findByIdForUpdate(expiredPoll.getId());
+            if (pollResult.isEmpty()) continue;
+            Poll poll = pollResult.get();
+            if (poll.getStatus() == PollStatus.OPEN && poll.getEndsAt() != null
+                    && !poll.getEndsAt().isAfter(now)) {
                 closePoll(poll);
+                publishAfterCommit("POLL_CLOSED", response(poll, poll.getCreatedBy()));
             }
         }
     }
 
     private Poll closeIfExpired(Poll poll) {
-        if (poll.getStatus() == PollStatus.OPEN && poll.getClosesAt() != null
-                && !poll.getClosesAt().isAfter(Instant.now())) {
+        if (poll.getStatus() == PollStatus.OPEN && poll.getEndsAt() != null
+                && !Instant.now().isBefore(poll.getEndsAt())) {
             poll = pollRepository.findByIdForUpdate(poll.getId()).orElse(poll);
-            if (poll.getStatus() == PollStatus.OPEN) closePoll(poll);
+            if (poll.getStatus() == PollStatus.OPEN) {
+                closePoll(poll);
+                publishAfterCommit("POLL_CLOSED", response(poll, poll.getCreatedBy()));
+            }
         }
         return poll;
     }
@@ -231,6 +245,24 @@ public class PollServiceImpl implements PollService {
         poll.setStatus(PollStatus.CLOSED);
         poll.setClosedAt(Instant.now());
         pollRepository.save(poll);
+    }
+
+    private void publishAfterCommit(String type, PollResponse poll) {
+        afterCommit(() -> messagingTemplate.convertAndSend(
+                "/topic/polls/" + poll.id() + "/results", new PollUpdateEvent(type, poll)));
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 
     private void requireMember(Project project, UUID userId) {

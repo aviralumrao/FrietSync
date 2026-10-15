@@ -15,8 +15,7 @@ import java.util.UUID;
 public interface PollRepository extends JpaRepository<Poll, UUID> {
     List<Poll> findByProjectIdOrderByCreatedAtDesc(UUID projectId);
 
-    List<Poll> findTop100ByStatusAndClosesAtLessThanEqualOrderByClosesAtAsc(
-            PollStatus status, Instant closesAt);
+    List<Poll> findByStatusAndEndsAtLessThanEqual(PollStatus status, Instant endsAt);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Poll p where p.id = :id")

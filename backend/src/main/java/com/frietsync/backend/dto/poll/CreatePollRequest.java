@@ -17,7 +17,7 @@ public class CreatePollRequest {
     private String description;
     @NotEmpty @Size(min = 2, max = 20)
     private List<@NotBlank @Size(max = 300) String> options;
-    private Instant closesAt;
+    private Instant endsAt;
     private PollMode mode;
     private UUID issueId;
     private UUID sprintId;

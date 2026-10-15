@@ -38,7 +38,7 @@ public class Poll extends BaseEntity {
     @Column(name = "milestone_id")
     private UUID milestoneId;
     @Column(name = "closes_at")
-    private Instant closesAt;
+    private Instant endsAt;
     @Column(name = "decision_record", length = 4000)
     private String decisionRecord;
     @Column(name = "closed_at")

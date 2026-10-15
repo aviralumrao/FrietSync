@@ -160,7 +160,7 @@ Create a poll with `POST /api/v1/projects/{projectId}/polls`:
   "question": "Which approach should we use?",
   "description": "Optional background",
   "options": ["Approach A", "Approach B"],
-  "closesAt": "2026-10-20T12:00:00Z",
+  "endsAt": "2026-10-20T12:00:00Z",
   "mode": "SINGLE",
   "issueId": null,
   "sprintId": null,
@@ -168,7 +168,7 @@ Create a poll with `POST /api/v1/projects/{projectId}/polls`:
 }
 ```
 
-`question` is required (up to 200 characters). `options` must contain 2–20 unique, nonblank values, each up to 300 characters. `description` is optional (up to 400 characters). `closesAt` is an optional future ISO-8601 timestamp. `mode` is `SINGLE` or `MULTIPLE`; if omitted, it defaults to `SINGLE`. At most one of `issueId`, `sprintId`, or `milestoneId` can be provided, and the linked item must belong to the specified project. Creation returns **201 Created**.
+`question` is required (up to 200 characters). `options` must contain 2–20 unique, nonblank values, each up to 300 characters. `description` is optional (up to 400 characters). `endsAt` is an optional future ISO-8601 timestamp; the server rejects votes at or after this deadline. `mode` is `SINGLE` or `MULTIPLE`; if omitted, it defaults to `SINGLE`. At most one of `issueId`, `sprintId`, or `milestoneId` can be provided, and the linked item must belong to the specified project. Creation returns **201 Created**.
 
 Other poll routes:
 
@@ -210,7 +210,7 @@ Poll endpoints return a `PollResponse` (or a list of them) with this shape:
   "issueId": null,
   "sprintId": null,
   "milestoneId": null,
-  "closesAt": "2026-10-20T12:00:00Z",
+  "endsAt": "2026-10-20T12:00:00Z",
   "closedAt": null,
   "decisionRecord": null,
   "createdAt": "2026-10-15T09:00:00Z",
@@ -223,7 +223,9 @@ Poll endpoints return a `PollResponse` (or a list of them) with this shape:
 }
 ```
 
-`myVote` is the current user's first selected option (or `null` when they have not voted); `myVotes` contains all of their selected options. The scheduler closes expired polls automatically. `decisionRecord` is optional and limited to 4,000 characters.
+`myVote` is the current user's first selected option (or `null` when they have not voted); `myVotes` contains all of their selected options. A background scheduler checks for expired polls every 10 seconds and closes them. `decisionRecord` is optional and limited to 4,000 characters.
+
+Polls also publish live updates over the authenticated STOMP connection at `/ws`. Subscribe to `/topic/polls/{pollId}/results` to receive events with `type` (`POLL_CREATED`, `POLL_UPDATED`, or `POLL_CLOSED`) and the updated `poll` response. `POLL_CLOSED` includes final option vote totals. Continue using REST to create polls, vote, and close; successful changes and deadline closures are broadcast after the database transaction commits. Use REST list/get endpoints for initial state, then apply WebSocket events for live updates.
 
 Protected routes use `Authorization: Bearer <access-token>`, except refresh and logout, which use the `refreshToken` HTTP-only cookie set during login. 
 
