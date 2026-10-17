@@ -16,4 +16,6 @@ public interface UserService {
     ProfileResponse removeProfilePicture(UUID userId);
 
     void leaveWorkspace(UUID userId);
+
+    void deleteAccount(UUID userId);
 }
