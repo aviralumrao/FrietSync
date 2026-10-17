@@ -57,4 +57,11 @@ public class UserController {
                 Map.of("message", "Successfully left the workspace")
         );
     }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> deleteAccount(
+            @AuthenticationPrincipal UUID userId) {
+        userService.deleteAccount(userId);
+        return ResponseEntity.noContent().build();
+    }
 }

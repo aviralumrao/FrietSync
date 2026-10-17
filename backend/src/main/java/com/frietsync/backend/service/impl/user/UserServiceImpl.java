@@ -9,6 +9,7 @@ import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.exception.StorageServiceException;
 import com.frietsync.backend.repository.user.UserRepository;
+import com.frietsync.backend.repository.user.AccountCleanupRepository;
 import com.frietsync.backend.repository.workspace.WorkspaceRepository;
 import com.frietsync.backend.service.impl.issue.S3ObjectCleanupService;
 import com.frietsync.backend.service.impl.storage.S3UploadValidator;
@@ -43,6 +44,7 @@ public class UserServiceImpl implements UserService {
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
     private final S3ObjectCleanupService cleanupService;
+    private final AccountCleanupRepository accountCleanupRepository;
 
     @Value("${aws.s3.bucket:}")
     private String bucketName;
@@ -164,6 +166,57 @@ public class UserServiceImpl implements UserService {
         user.setWorkspaceId(null);
         user.setRole(Role.ADMIN);
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void deleteAccount(UUID userId) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        UUID workspaceId = user.getWorkspaceId();
+        UUID replacementId = null;
+        if (workspaceId != null) {
+            Workspace workspace = workspaceRepository.findByIdForUpdate(workspaceId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Workspace not found"));
+            if (workspace.getAdminId().equals(userId)) {
+                throw new BadRequestException("Workspace admin must transfer ownership before deleting the account");
+            } else {
+                replacementId = workspace.getAdminId();
+            }
+        }
+
+        if (replacementId == null) {
+            replacementId = UUID.randomUUID();
+        }
+
+        UUID attributionId = replacementId;
+        accountCleanupRepository.deleteProjectMemberships(userId);
+        accountCleanupRepository.clearIssueAssigner(userId);
+        accountCleanupRepository.deleteIssueAssignments(userId);
+        accountCleanupRepository.deleteMeetingAttendance(userId);
+        accountCleanupRepository.deleteIssueAssignmentRequests(userId);
+        accountCleanupRepository.deleteSprintAssignmentRequests(userId);
+        accountCleanupRepository.deletePollVotes(userId);
+        accountCleanupRepository.deleteNotifications(userId);
+        accountCleanupRepository.deleteNotificationPreferences(userId);
+        accountCleanupRepository.deleteInvites(userId);
+        accountCleanupRepository.replaceProjectUserReferences(userId, attributionId);
+        accountCleanupRepository.clearSprintAssignment(userId);
+        accountCleanupRepository.replaceMeetingOrganizer(userId, attributionId);
+        accountCleanupRepository.replaceChatSender(userId, attributionId);
+        accountCleanupRepository.replaceIssueCreator(userId, attributionId);
+        accountCleanupRepository.replaceSprintCreator(userId, attributionId);
+        accountCleanupRepository.replacePollCreator(userId, attributionId);
+        accountCleanupRepository.replaceIssueLinkCreator(userId, attributionId);
+        accountCleanupRepository.replaceAttachmentUploader(userId, attributionId);
+        accountCleanupRepository.replaceIssueHistoryActor(userId, attributionId);
+        accountCleanupRepository.clearIssueDecisionMaker(userId);
+        accountCleanupRepository.clearSprintReviewer(userId);
+        accountCleanupRepository.clearNotificationActor(userId);
+
+        String profilePictureKey = user.getProfilePictureKey();
+        userRepository.delete(user);
+        enqueueStoredFileDeletion(profilePictureKey);
     }
 
     private User findUser(UUID userId) {
