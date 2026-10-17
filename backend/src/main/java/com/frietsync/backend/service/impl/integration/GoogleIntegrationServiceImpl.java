@@ -4,6 +4,7 @@ import com.frietsync.backend.config.integration.GoogleOAuthProperties;
 import com.frietsync.backend.entity.integration.GoogleConnection;
 import com.frietsync.backend.entity.integration.GoogleOAuthState;
 import com.frietsync.backend.entity.user.User;
+import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.repository.integration.GoogleConnectionRepository;
 import com.frietsync.backend.repository.integration.GoogleOAuthStateRepository;
 import com.frietsync.backend.repository.user.UserRepository;
@@ -15,39 +16,40 @@ import com.frietsync.backend.service.integration.OAuthExchangeException;
 import com.frietsync.backend.service.integration.ReauthorizationRequiredException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.util.DigestUtils;
 
 @Service
 @RequiredArgsConstructor
 public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
-    private static final String SCOPE = "https://www.googleapis.com/auth/calendar.events";
+    private static final String SCOPE = "openid email https://www.googleapis.com/auth/calendar.events";
     private final GoogleOAuthProperties properties;
     private final GoogleOAuthStateRepository stateRepository;
     private final GoogleConnectionRepository connectionRepository;
     private final UserRepository userRepository;
     private final GoogleTokenCipher cipher;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Override
     @Transactional
     public URI createAuthorizationUri(UUID userId) {
-        User user = userRepository.findById(userId).orElseThrow();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         byte[] random = new byte[32];
         secureRandom.nextBytes(random);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(random);
@@ -60,12 +62,12 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
                 .queryParam("client_id", properties.getClientId())
                 .queryParam("redirect_uri", properties.getRedirectUri())
                 .queryParam("response_type", "code").queryParam("scope", SCOPE)
-                .queryParam("access_type", "offline").queryParam("prompt", "consent")
+                .queryParam("access_type", "offline")
                 .queryParam("state", state).build().encode().toUri();
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = InvalidOAuthStateException.class)
     public UUID consumeState(String state) {
         if (state == null || state.length() > 200) throw new InvalidOAuthStateException();
         GoogleOAuthState pending = stateRepository.findByHashForUpdate(hash(state))
@@ -85,7 +87,9 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
         form.add("redirect_uri", properties.getRedirectUri());
         form.add("grant_type", "authorization_code");
         Map<String, Object> tokens = requestTokens(form);
-        if (tokens == null || !(tokens.get("access_token") instanceof String access)) throw new OAuthExchangeException();
+        if (tokens == null || !(tokens.get("access_token") instanceof String access)) {
+            throw new OAuthExchangeException();
+        }
         String refresh = tokens.get("refresh_token") instanceof String value ? value : null;
         GoogleConnection connection = connectionRepository.findByUser_Id(userId).orElseGet(GoogleConnection::new);
         if (refresh == null || refresh.isBlank()) {
@@ -93,7 +97,10 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
         } else {
             connection.setEncryptedRefreshToken(cipher.encrypt(refresh));
         }
+        Map<String, Object> profile = getGoogleProfile(access);
         connection.setUser(userRepository.getReferenceById(userId));
+        connection.setGoogleSubject((String) profile.get("sub"));
+        connection.setGoogleEmail((String) profile.get("email"));
         connection.setNeedsReauthorization(false);
         connectionRepository.save(connection);
     }
@@ -101,11 +108,14 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
     @Override
     @Transactional
     public void disconnect(UUID userId) {
-        connectionRepository.findByUser_Id(userId).ifPresent(connectionRepository::delete);
+        connectionRepository.findByUser_Id(userId).ifPresent(connection -> {
+            revokeToken(cipher.decrypt(connection.getEncryptedRefreshToken()));
+            connectionRepository.delete(connection);
+        });
     }
 
     @Override
-    @Transactional(noRollbackFor = ReauthorizationRequiredException.class)
+    @Transactional
     public String getValidAccessToken(UUID userId) {
         GoogleConnection connection = connectionRepository.findByUser_Id(userId)
                 .orElseThrow(ReauthorizationRequiredException::new);
@@ -115,17 +125,11 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
         form.add("client_secret", properties.getClientSecret());
         form.add("refresh_token", cipher.decrypt(connection.getEncryptedRefreshToken()));
         form.add("grant_type", "refresh_token");
-        try {
-            Map<String, Object> response = requestTokens(form);
-            if (response == null || !(response.get("access_token") instanceof String access)) throw new OAuthExchangeException();
-            return access;
-        } catch (org.springframework.web.client.HttpStatusCodeException ex) {
-            if (ex.getStatusCode().value() == 400 || ex.getStatusCode().value() == 401) {
-                connection.setNeedsReauthorization(true);
-                throw new ReauthorizationRequiredException();
-            }
-            throw ex;
+        Map<String, Object> response = requestTokens(form);
+        if (response == null || !(response.get("access_token") instanceof String access)) {
+            throw new OAuthExchangeException();
         }
+        return access;
     }
 
     @SuppressWarnings("unchecked")
@@ -136,10 +140,28 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
                 new HttpEntity<>(form, headers), Map.class);
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getGoogleProfile(String accessToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        Map<String, Object> profile = restTemplate.exchange(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                HttpMethod.GET,
+                new HttpEntity<>(headers), Map.class).getBody();
+        if (profile == null || !(profile.get("sub") instanceof String)) throw new OAuthExchangeException();
+        return profile;
+    }
+
+    private void revokeToken(String refreshToken) {
+        LinkedMultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("token", refreshToken);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        restTemplate.postForEntity("https://oauth2.googleapis.com/revoke",
+                new HttpEntity<>(form, headers), Void.class);
+    }
+
     private static String hash(String value) {
-        try {
-            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception ex) { throw new IllegalStateException(ex); }
+        return DigestUtils.sha256DigestAsHex(value);
     }
 }

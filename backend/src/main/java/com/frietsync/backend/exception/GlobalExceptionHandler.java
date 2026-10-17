@@ -1,6 +1,12 @@
 package com.frietsync.backend.exception;
 
 import io.jsonwebtoken.JwtException;
+import com.frietsync.backend.config.integration.GoogleOAuthProperties;
+import com.frietsync.backend.service.integration.InvalidOAuthStateException;
+import com.frietsync.backend.service.integration.MissingRefreshTokenException;
+import com.frietsync.backend.service.integration.OAuthExchangeException;
+import com.frietsync.backend.service.integration.ReauthorizationRequiredException;
+import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,16 +16,51 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final GoogleOAuthProperties googleOAuthProperties;
+
+    @ExceptionHandler(RestClientException.class)
+    public ResponseEntity<?> handleExternalServiceFailure(HttpServletRequest request) {
+        return googleErrorResponse(request, HttpStatus.BAD_GATEWAY, "failed",
+                "External service request failed");
+    }
+
+    @ExceptionHandler(OAuthExchangeException.class)
+    public ResponseEntity<?> handleGoogleOAuthFailure(HttpServletRequest request) {
+        return googleErrorResponse(request, HttpStatus.BAD_GATEWAY, "failed",
+                "Google authorization service request failed");
+    }
+
+    @ExceptionHandler(ReauthorizationRequiredException.class)
+    public ResponseEntity<?> handleGoogleReauthorizationRequired(HttpServletRequest request) {
+        return googleErrorResponse(request, HttpStatus.CONFLICT, "reconnect_required",
+                "Google account reconnection is required");
+    }
+
+    @ExceptionHandler(MissingRefreshTokenException.class)
+    public ResponseEntity<?> handleMissingRefreshToken(HttpServletRequest request) {
+        return googleErrorResponse(request, HttpStatus.CONFLICT, "reconnect_required",
+                "Google account reconnection is required");
+    }
+
+    @ExceptionHandler(InvalidOAuthStateException.class)
+    public ResponseEntity<?> handleInvalidGoogleState(HttpServletRequest request) {
+        return googleErrorResponse(request, HttpStatus.BAD_REQUEST, "invalid_state",
+                "Google authorization state is invalid or expired");
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFoundException(
@@ -88,10 +129,13 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<ErrorResponse> handleDataIntegrityViolationException(
+    public ResponseEntity<?> handleDataIntegrityViolationException(
             DataIntegrityViolationException ex,
             HttpServletRequest request) {
         LOG.warn("Database constraint violation: {}", ex.getMessage());
+        if (isGoogleCallback(request)) {
+            return ResponseEntity.status(HttpStatus.FOUND).location(frontendResult("failed")).build();
+        }
         ErrorResponse errorResponse = new ErrorResponse(
                 Instant.now(),
                 HttpStatus.CONFLICT.value(),
@@ -103,10 +147,14 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGenericException(
+    public ResponseEntity<?> handleGenericException(
             Exception ex,
             HttpServletRequest request) {
         LOG.error("Unhandled exception occurred", ex);
+
+        if (isGoogleCallback(request)) {
+            return ResponseEntity.status(HttpStatus.FOUND).location(frontendResult("failed")).build();
+        }
 
         ErrorResponse errorResponse = new ErrorResponse(
                 Instant.now(),
@@ -116,6 +164,25 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
+
+    private ResponseEntity<?> googleErrorResponse(HttpServletRequest request, HttpStatus status,
+                                                   String result, String message) {
+        if (isGoogleCallback(request)) {
+            return ResponseEntity.status(HttpStatus.FOUND).location(frontendResult(result)).build();
+        }
+        ErrorResponse errorResponse = new ErrorResponse(
+                Instant.now(), status.value(), status.getReasonPhrase(), message, request.getRequestURI());
+        return ResponseEntity.status(status).body(errorResponse);
+    }
+
+    private boolean isGoogleCallback(HttpServletRequest request) {
+        return request.getRequestURI().equals("/api/v1/integrations/google/callback");
+    }
+
+    private URI frontendResult(String result) {
+        return UriComponentsBuilder.fromUriString(googleOAuthProperties.getFrontendResultUri())
+                .queryParam("google", result).build().encode().toUri();
     }
     @ExceptionHandler(JwtException.class)
     public ResponseEntity<ErrorResponse> handleJwtException(
