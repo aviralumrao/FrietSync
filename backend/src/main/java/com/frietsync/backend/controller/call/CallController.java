@@ -1,6 +1,8 @@
 package com.frietsync.backend.controller.call;
 
 import com.frietsync.backend.dto.call.CallResponse;
+import com.frietsync.backend.dto.call.JoinCallResponse;
+import com.frietsync.backend.config.call.JanusConfig;
 import com.frietsync.backend.service.call.CallService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,7 @@ import java.util.UUID;
 public class CallController {
 
     private final CallService callService;
+    private final JanusConfig janusConfig;
 
     @PostMapping
     public ResponseEntity<CallResponse> startCall(
@@ -37,11 +40,14 @@ public class CallController {
     }
 
     @PostMapping("/{callId}/join")
-    public ResponseEntity<CallResponse> joinCall(
+    public ResponseEntity<JoinCallResponse> joinCall(
             @PathVariable UUID projectId,
             @PathVariable UUID callId,
             @AuthenticationPrincipal UUID userId) {
-        return ResponseEntity.ok(CallResponse.from(callService.joinCall(projectId, callId, userId)));
+        return ResponseEntity.ok(JoinCallResponse.from(
+                callService.joinCall(projectId, callId, userId),
+                janusConfig.roomPin()
+        ));
     }
 
     @PostMapping("/{callId}/leave")
