@@ -4,20 +4,25 @@ package com.frietsync.backend.service.impl.call;
 import com.frietsync.backend.entity.call.CallSession;
 import com.frietsync.backend.entity.project.Project;
 import com.frietsync.backend.entity.user.Role;
+import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.repository.call.CallSessionRepository;
 import com.frietsync.backend.repository.project.ProjectRepository;
+import com.frietsync.backend.repository.user.UserRepository;
+import com.frietsync.backend.service.call.CallEvent;
 import com.frietsync.backend.service.call.CallService;
 import com.frietsync.backend.service.call.JanusService;
 import com.frietsync.backend.service.impl.project.ProjectAccess;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -28,6 +33,8 @@ public class CallServiceImpl implements CallService {
     private final JanusService janusService;
     private final ProjectAccess projectAccess;
     private final ProjectRepository projectRepository;
+    private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -55,7 +62,9 @@ public class CallServiceImpl implements CallService {
             call.setRoomId(roomId);
             call.setStatus(CallSession.CallStatus.ACTIVE);
 
-            return callSessionRepository.save(call);
+            CallSession savedCall = callSessionRepository.save(call);
+            publishEvent(project, savedCall, CallEvent.Type.STARTED, userId);
+            return savedCall;
 
         } catch (RuntimeException exception) {
             try {
@@ -83,7 +92,9 @@ public class CallServiceImpl implements CallService {
     public CallSession joinCall(UUID projectId, UUID callId, UUID userId) {
         Project project = projectAccess.project(projectId);
         projectAccess.requireMember(project, userId);
-        return activeCall(projectId, callId);
+        CallSession call = activeCall(projectId, callId);
+        publishEvent(project, call, CallEvent.Type.JOINED, userId);
+        return call;
     }
 
     @Override
@@ -91,7 +102,8 @@ public class CallServiceImpl implements CallService {
     public void leaveCall(UUID projectId, UUID callId, UUID userId) {
         Project project = projectAccess.project(projectId);
         projectAccess.requireMember(project, userId);
-        activeCall(projectId, callId);
+        CallSession call = activeCall(projectId, callId);
+        publishEvent(project, call, CallEvent.Type.LEFT, userId);
     }
 
     @Override
@@ -116,7 +128,9 @@ public class CallServiceImpl implements CallService {
         call.setStatus(CallSession.CallStatus.ENDED);
         call.setEndedAt(java.time.Instant.now());
 
-        return callSessionRepository.save(call);
+        CallSession savedCall = callSessionRepository.save(call);
+        publishEvent(project, savedCall, CallEvent.Type.ENDED, userId);
+        return savedCall;
     }
 
     private CallSession activeCall(UUID projectId, UUID callId) {
@@ -126,5 +140,35 @@ public class CallServiceImpl implements CallService {
             throw new BadRequestException("Call has already ended");
         }
         return call;
+    }
+
+    private void publishEvent(Project project, CallSession call, CallEvent.Type type, UUID userId) {
+        String actorName = userName(userId);
+        String startedByName = call.getInitiatedBy().equals(userId)
+                ? actorName
+                : userName(call.getInitiatedBy());
+        eventPublisher.publishEvent(new CallEvent(
+                call.getProjectId(),
+                project.getName(),
+                type,
+                userId,
+                actorName,
+                new CallEvent.CallDetails(
+                        call.getId(),
+                        call.getRoomId(),
+                        call.getInitiatedBy(),
+                        startedByName,
+                        call.getStatus(),
+                        call.getStartedAt(),
+                        call.getEndedAt()
+                ),
+                Instant.now()
+        ));
+    }
+
+    private String userName(UUID userId) {
+        return userRepository.findById(userId)
+                .map(User::getName)
+                .orElse("Unknown user");
     }
 }

@@ -29,6 +29,7 @@ public class ChatAuthChannelInterceptor implements ChannelInterceptor {
     private static final String SEND_PREFIX = "/app/projects/";
     private static final String CHAT_SUFFIX = "/chat";
     private static final String TOPIC_PREFIX = "/topic/projects/";
+    private static final String CALLS_SUFFIX = "/calls";
     private static final String NOTIFICATION_DESTINATION = "/user/queue/notifications";
 
     private final ChatService chatService;
@@ -112,6 +113,10 @@ public class ChatAuthChannelInterceptor implements ChannelInterceptor {
     }
 
     private UUID subscriptionProjectId(String destination) {
+        if (destination != null && destination.startsWith(TOPIC_PREFIX)
+                && destination.endsWith(CALLS_SUFFIX)) {
+            return topicProjectId(destination, CALLS_SUFFIX);
+        }
         String pollResultsPrefix = "/topic/polls/";
         String pollResultsSuffix = "/results";
         if (destination != null && destination.startsWith(pollResultsPrefix)
@@ -138,5 +143,15 @@ public class ChatAuthChannelInterceptor implements ChannelInterceptor {
             }
         }
         return projectId(destination, TOPIC_PREFIX);
+    }
+
+    private UUID topicProjectId(String destination, String suffix) {
+        String value = destination.substring(TOPIC_PREFIX.length(), destination.length() - suffix.length());
+        try {
+            if (value.isBlank() || value.contains("/")) throw new IllegalArgumentException();
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            throw new AccessDeniedException("Invalid project identifier", ex);
+        }
     }
 }
