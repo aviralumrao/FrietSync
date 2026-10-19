@@ -33,7 +33,11 @@ public class GlobalExceptionHandler {
     private final GoogleOAuthProperties googleOAuthProperties;
 
     @ExceptionHandler(RestClientException.class)
-    public ResponseEntity<?> handleExternalServiceFailure(HttpServletRequest request) {
+    public ResponseEntity<?> handleExternalServiceFailure(
+            RestClientException ex,
+            HttpServletRequest request) {
+        LOG.error("External service request failed for {}: {}",
+                request.getRequestURI(), ex.getMessage(), ex);
         return googleErrorResponse(request, HttpStatus.BAD_GATEWAY, "failed",
                 "External service request failed");
     }

@@ -1,6 +1,5 @@
 package com.frietsync.backend.service.impl.call;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.frietsync.backend.config.call.JanusConfig;
 import com.frietsync.backend.service.call.JanusService;
 
@@ -9,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.JsonNode;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -163,7 +163,7 @@ public class JanusServiceImpl implements JanusService {
     private JsonNode post(String path, Map<String, Object> payload) {
         JsonNode response = client()
                 .post()
-                .uri(path)
+                .uri(uriBuilder -> uriBuilder.path(path).build())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(payload)
                 .retrieve()
