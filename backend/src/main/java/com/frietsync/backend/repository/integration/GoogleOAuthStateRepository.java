@@ -11,6 +11,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface GoogleOAuthStateRepository extends JpaRepository<GoogleOAuthState, UUID> {
+    boolean existsByStateHashAndExpiresAtAfter(String stateHash, java.time.Instant now);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from GoogleOAuthState s where s.stateHash = :hash")
     Optional<GoogleOAuthState> findByHashForUpdate(@Param("hash") String hash);
