@@ -64,6 +64,21 @@ The backend routes are grouped under `/api/v1`, with additional project-scoped e
 
 The backend also exposes authenticated routes for workspaces, projects, issues, meetings, polls, releases, milestones, notifications, and chat. Unless specifically listed as public above, these endpoints require a valid access token.
 
+### GitHub integration
+
+Configure `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI` (the backend callback URL), `GITHUB_OAUTH_ENCRYPTION_KEY` (base64 for 32 random bytes), and `GITHUB_OAUTH_FRONTEND_RESULT_URI`. `GITHUB_OAUTH_STATE_TTL_SECONDS` is optional and defaults to 600. The OAuth app requests `read:user` and `repo` so the chosen project repository can be read, including private repositories. Access tokens are encrypted at rest.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| GET | `/api/v1/integrations/github/connect` | Return `{ "authorizationUrl": "..." }` for the signed-in user's OAuth flow |
+| GET | `/api/v1/integrations/github/callback` | GitHub OAuth callback; redirects to the frontend with `?github=connected`, `denied`, or `failed` |
+| DELETE | `/api/v1/integrations/github/disconnect` | Remove the signed-in user's GitHub connection |
+| PUT | `/api/v1/integrations/github/projects/{projectId}/repository` | Link `{ "owner": "...", "repository": "..." }`; project admin, manager, or team lead only |
+| DELETE | `/api/v1/integrations/github/projects/{projectId}/repository` | Unlink the project's repository; project admin, manager, or team lead only |
+| GET | `/api/v1/integrations/github/projects/{projectId}/contributions` | Return commit totals and daily counts, pull request totals, and merged pull request totals for project members |
+
+Each member connects their own GitHub account to associate a GitHub login with their FrietSync user. The member list includes users without a connection with zero activity. The repository must be readable by the account performing the contribution request. GitHub activity is fetched live and currently paginates up to the most recent 1,000 commits and 1,000 pull requests.
+
 ### Workspaces and projects
 
 | Method | URL | Access | Notes |
