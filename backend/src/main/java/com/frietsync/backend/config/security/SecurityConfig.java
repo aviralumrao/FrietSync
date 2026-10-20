@@ -21,20 +21,23 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthFilter jwtAuthFilter) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthFilter jwtAuthFilter,
+                                                   OAuthCallbackStateFilter oauthCallbackStateFilter) throws Exception {
         http
 
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**", "/api/v1/check").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/integrations/google/callback").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/integrations/google/callback",
+                                "/api/v1/integrations/github/callback").hasRole("OAUTH_CALLBACK")
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/projects").hasRole("ADMIN")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(oauthCallbackStateFilter, JwtAuthFilter.class);
         return http.build();
     }
 }
