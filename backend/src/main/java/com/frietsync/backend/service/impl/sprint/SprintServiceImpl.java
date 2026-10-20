@@ -332,7 +332,9 @@ public class SprintServiceImpl implements SprintService {
                 milestoneName = milestone.getName();
             }
         }
-        return SprintResponse.fromEntity(sprint, milestoneName);
+        String contributorName = sprint.getAssignedContributorId() == null ? null
+                : userRepository.findById(sprint.getAssignedContributorId()).map(User::getName).orElse(null);
+        return SprintResponse.fromEntity(sprint, milestoneName, contributorName);
     }
 
     private void checkDatesWithinProject(Project project, LocalDate startDate, LocalDate endDate) {

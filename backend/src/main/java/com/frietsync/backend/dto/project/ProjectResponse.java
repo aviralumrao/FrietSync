@@ -31,6 +31,16 @@ public class ProjectResponse {
     private UUID adminId;
     private UUID projectManagerId;
     private UUID teamLeadId;
+    private UserSummary projectManager;
+    private UserSummary teamLead;
+
+    @Data
+    @Builder
+    public static class UserSummary {
+        private UUID id;
+        private String name;
+        private String role;
+    }
 
     public static ProjectResponse fromEntity(Project p, double progressPercentage) {
         return ProjectResponse.builder()

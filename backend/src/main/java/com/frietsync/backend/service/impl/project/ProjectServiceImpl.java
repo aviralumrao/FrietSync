@@ -149,7 +149,18 @@ public class ProjectServiceImpl implements ProjectService {
         if (totalSprints > 0) {
             progress = completedSprints * 100.0 / totalSprints;
         }
-        return ProjectResponse.fromEntity(project, progress);
+        ProjectResponse response = ProjectResponse.fromEntity(project, progress);
+        response.setProjectManager(userSummary(project.getProjectManagerId()));
+        response.setTeamLead(userSummary(project.getTeamLeadId()));
+        return response;
+    }
+
+    private ProjectResponse.UserSummary userSummary(UUID userId) {
+        if (userId == null) return null;
+        return userRepository.findById(userId)
+                .map(user -> ProjectResponse.UserSummary.builder()
+                        .id(user.getId()).name(user.getName()).role(user.getRole().name()).build())
+                .orElse(null);
     }
 
     @Override

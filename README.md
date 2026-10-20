@@ -232,6 +232,51 @@ Polls also publish live updates over the authenticated STOMP connection at `/ws`
 
 Protected routes use `Authorization: Bearer <access-token>`, except refresh and logout, which use the `refreshToken` HTTP-only cookie set during login. 
 
+### Project dashboard data
+
+The project page can use the existing endpoints below; no dashboard-specific route is required:
+
+| Endpoint | Dashboard data |
+|---|---|
+| `GET /api/v1/projects/{projectId}` | Project details and progress, plus `projectManager` and `teamLead` summaries (`id`, `name`, `role`) when assigned |
+| `GET /api/v1/projects/{projectId}/members` | Project member names, emails, roles, and IDs |
+| `GET /api/v1/projects/{projectId}/board` | Issue columns and card data, including assignee (`id`, `name`), labels (`id`, `name`, `color`), `assignedToCurrentUser`, and top-level `myTasksCount` |
+| `GET /api/v1/projects/{projectId}/summary` | Issue and sprint totals, status counts, overdue counts, and estimated-hour summaries; use issue counts for task overview charts |
+| `GET /api/v1/projects/{projectId}/sprints` | Sprint details including status and assigned contributor name and ID |
+| `GET /api/v1/projects/{projectId}/milestones` | Milestone due date and `progressPercentage`; the existing service calculates progress from its sprints |
+| `GET /api/v1/projects/{projectId}/activity?limit=10` | Recent events with actor name and issue details; `limit` can be 1 through 100 |
+| `GET /api/v1/projects/{projectId}/polls` | Polls ordered newest first, with option vote totals; the first entry is the latest poll |
+
+The board endpoint reports issue status and priority but does not track a separate issue completion percentage or link issues to sprints. Render task progress from the project summary status counts, and render sprint counts from sprint statuses. The project manager and team lead summaries contain names but not profile image URLs.
+
+Each board response now includes a project-wide `myTasksCount`; each issue card includes its first assignee (or `null`), all labels, and whether the authenticated user is assigned:
+
+```json
+{
+  "columns": [
+    {
+      "status": "OPEN",
+      "allowedTransitions": ["IN_PROGRESS"],
+      "issues": [
+        {
+          "id": "<issue-uuid>",
+          "issueNumber": 205,
+          "title": "Setup analytics tracking",
+          "priority": "MEDIUM",
+          "dueDate": "2026-10-22",
+          "assignee": {"id": "<user-uuid>", "name": "Alex Morgan"},
+          "labels": [{"id": "<label-uuid>", "name": "Analytics", "color": "#21a5d8"}],
+          "assignedToCurrentUser": true
+        }
+      ]
+    }
+  ],
+  "myTasksCount": 6
+}
+```
+
+Project responses include `projectManager` and `teamLead` as `null` when unassigned, or as `{ "id", "name", "role" }` when assigned. Sprint responses add `assignedContributorName`, which is `null` when no contributor is assigned.
+
 `GET /api/v1/check` returns:
 
 ```json

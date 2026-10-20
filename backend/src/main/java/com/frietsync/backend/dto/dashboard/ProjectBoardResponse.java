@@ -15,6 +15,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class ProjectBoardResponse {
     private List<Column> columns;
+    private long myTasksCount;
 
     @Data
     @NoArgsConstructor
@@ -34,5 +35,25 @@ public class ProjectBoardResponse {
         private String title;
         private IssuePriority priority;
         private LocalDate dueDate;
+        private Assignee assignee;
+        private List<Label> labels;
+        private boolean assignedToCurrentUser;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Assignee {
+        private UUID id;
+        private String name;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Label {
+        private UUID id;
+        private String name;
+        private String color;
     }
 }

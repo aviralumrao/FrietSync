@@ -22,10 +22,11 @@ public class SprintResponse {
     private LocalDate endDate;
     private UUID createdBy;
     private UUID assignedContributorId;
+    private String assignedContributorName;
     private Instant createdAt;
     private Instant updatedAt;
 
-    public static SprintResponse fromEntity(Sprint sprint, String milestoneName) {
+    public static SprintResponse fromEntity(Sprint sprint, String milestoneName, String assignedContributorName) {
         SprintResponse response = new SprintResponse();
         response.setId(sprint.getId());
         response.setProjectId(sprint.getProjectId());
@@ -39,6 +40,7 @@ public class SprintResponse {
         response.setEndDate(sprint.getEndDate());
         response.setCreatedBy(sprint.getCreatedBy());
         response.setAssignedContributorId(sprint.getAssignedContributorId());
+        response.setAssignedContributorName(assignedContributorName);
         response.setCreatedAt(sprint.getCreatedAt());
         response.setUpdatedAt(sprint.getUpdatedAt());
         return response;

@@ -5,19 +5,26 @@ import com.frietsync.backend.dto.dashboard.ProjectCalendarResponse;
 import com.frietsync.backend.dto.dashboard.ProjectTimelineResponse;
 import com.frietsync.backend.entity.issue.Issue;
 import com.frietsync.backend.entity.issue.IssueLink;
+import com.frietsync.backend.entity.issue.IssueAssignee;
+import com.frietsync.backend.entity.issue.IssueLabel;
 import com.frietsync.backend.entity.issue.IssueStatus;
 import com.frietsync.backend.entity.meeting.Meeting;
 import com.frietsync.backend.entity.poll.Poll;
 import com.frietsync.backend.entity.project.Milestone;
+import com.frietsync.backend.entity.project.Label;
 import com.frietsync.backend.entity.project.Release;
 import com.frietsync.backend.entity.sprint.Sprint;
 import com.frietsync.backend.repository.issue.IssueLinkRepository;
+import com.frietsync.backend.repository.issue.IssueAssigneeRepository;
+import com.frietsync.backend.repository.issue.IssueLabelRepository;
 import com.frietsync.backend.repository.issue.IssueRepository;
 import com.frietsync.backend.repository.meeting.MeetingRepository;
 import com.frietsync.backend.repository.poll.PollRepository;
 import com.frietsync.backend.repository.project.MilestoneRepository;
+import com.frietsync.backend.repository.project.LabelRepository;
 import com.frietsync.backend.repository.project.ReleaseRepository;
 import com.frietsync.backend.repository.sprint.SprintRepository;
+import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.impl.project.ProjectAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -42,6 +49,10 @@ public class ProjectDashboardService {
 
     private final IssueRepository issueRepository;
     private final IssueLinkRepository issueLinkRepository;
+    private final IssueAssigneeRepository issueAssigneeRepository;
+    private final IssueLabelRepository issueLabelRepository;
+    private final LabelRepository labelRepository;
+    private final UserRepository userRepository;
     private final SprintRepository sprintRepository;
     private final MilestoneRepository milestoneRepository;
     private final ReleaseRepository releaseRepository;
@@ -51,19 +62,47 @@ public class ProjectDashboardService {
 
     public ProjectBoardResponse board(UUID projectId, UUID userId) {
         requireProjectMember(projectId, userId);
-        Map<IssueStatus, List<ProjectBoardResponse.IssueCard>> issuesByStatus = issueRepository
-                .findByProjectIdAndDeletedAtIsNullOrderByCreatedAtAsc(projectId).stream()
-                .collect(Collectors.groupingBy(Issue::getStatus, () -> new EnumMap<>(IssueStatus.class),
-                        Collectors.mapping(issue -> new ProjectBoardResponse.IssueCard(issue.getId(),
-                                issue.getIssueNumber(), issue.getTitle(), issue.getPriority(), issue.getDueDate()),
-                                Collectors.toList())));
+        List<Issue> issues = issueRepository.findByProjectIdAndDeletedAtIsNullOrderByCreatedAtAsc(projectId);
+        List<UUID> issueIds = issues.stream().map(Issue::getId).toList();
+        Map<UUID, List<IssueAssignee>> assigneesByIssue = issueIds.isEmpty() ? Map.of()
+                : issueAssigneeRepository.findByIssueIdIn(issueIds).stream()
+                .collect(Collectors.groupingBy(IssueAssignee::getIssueId));
+        Map<UUID, List<IssueLabel>> labelsByIssue = issueIds.isEmpty() ? Map.of()
+                : issueLabelRepository.findByIssueIdIn(issueIds).stream()
+                .collect(Collectors.groupingBy(IssueLabel::getIssueId));
+        Map<UUID, Label> labelsById = labelRepository.findAllById(labelsByIssue.values().stream()
+                .flatMap(List::stream).map(IssueLabel::getLabelId).distinct().toList()).stream()
+                .collect(Collectors.toMap(Label::getId, label -> label));
+        List<UUID> assigneeIds = assigneesByIssue.values().stream().flatMap(List::stream)
+                .map(IssueAssignee::getUserId).distinct().toList();
+        Map<UUID, String> namesByUser = userRepository.findAllById(assigneeIds).stream()
+                .collect(Collectors.toMap(user -> user.getId(), user -> user.getName()));
+        long myTasksCount = 0;
+        Map<IssueStatus, List<ProjectBoardResponse.IssueCard>> issuesByStatus = new EnumMap<>(IssueStatus.class);
+        for (Issue issue : issues) {
+            List<IssueAssignee> issueAssignees = assigneesByIssue.getOrDefault(issue.getId(), List.of());
+            IssueAssignee assigned = issueAssignees.isEmpty() ? null : issueAssignees.get(0);
+            boolean assignedToCurrentUser = issueAssignees.stream()
+                    .anyMatch(item -> item.getUserId().equals(userId));
+            if (assignedToCurrentUser) myTasksCount++;
+            ProjectBoardResponse.Assignee assignee = assigned == null ? null
+                    : new ProjectBoardResponse.Assignee(assigned.getUserId(), namesByUser.get(assigned.getUserId()));
+            List<ProjectBoardResponse.Label> labels = labelsByIssue.getOrDefault(issue.getId(), List.of()).stream()
+                    .map(link -> labelsById.get(link.getLabelId())).filter(java.util.Objects::nonNull)
+                    .map(label -> new ProjectBoardResponse.Label(label.getId(), label.getName(), label.getColor()))
+                    .toList();
+            ProjectBoardResponse.IssueCard card = new ProjectBoardResponse.IssueCard(issue.getId(),
+                    issue.getIssueNumber(), issue.getTitle(), issue.getPriority(), issue.getDueDate(),
+                    assignee, labels, assignedToCurrentUser);
+            issuesByStatus.computeIfAbsent(issue.getStatus(), ignored -> new ArrayList<>()).add(card);
+        }
 
         List<ProjectBoardResponse.Column> columns = new ArrayList<>();
         for (IssueStatus status : IssueStatus.values()) {
             columns.add(new ProjectBoardResponse.Column(status,
                     issuesByStatus.getOrDefault(status, List.of()), allowedTransitions(status)));
         }
-        return new ProjectBoardResponse(columns);
+        return new ProjectBoardResponse(columns, myTasksCount);
     }
 
     public ProjectCalendarResponse calendar(UUID projectId, UUID userId) {
