@@ -19,6 +19,7 @@ import com.frietsync.backend.repository.project.ProjectRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.meeting.MeetingService;
 import com.frietsync.backend.service.integration.GoogleIntegrationService;
+import com.frietsync.backend.service.impl.project.ProjectAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,11 +44,13 @@ public class MeetingServiceImpl implements MeetingService {
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final GoogleIntegrationService googleIntegrationService;
+    private final ProjectAccess projectAccess;
 
     @Override
     @Transactional
     public MeetingResponse create(UUID projectId, UUID organizerId, CreateMeetingRequest request) {
         Project project = findProject(projectId);
+        projectAccess.requireWorkspaceAndActive(project, organizerId);
         if (!isProjectParticipant(project, organizerId)) {
             throw new ForbiddenException("Only project participants can schedule meetings");
         }
@@ -81,6 +84,7 @@ public class MeetingServiceImpl implements MeetingService {
     @Override
     @Transactional(readOnly = true)
     public List<MeetingResponse> getMyMeetings(UUID userId) {
+        UUID workspaceId = projectAccess.requireActiveWorkspace(userId);
         Map<UUID, Meeting> meetings = new HashMap<>();
         for (Meeting meeting : meetingRepository.findByOrganizerIdOrderByStartAtAsc(userId)) {
             meetings.put(meeting.getId(), meeting);
@@ -96,7 +100,14 @@ public class MeetingServiceImpl implements MeetingService {
             }
         }
 
-        List<Meeting> orderedMeetings = new ArrayList<>(meetings.values());
+        List<Meeting> orderedMeetings = new ArrayList<>();
+        for (Meeting meeting : meetings.values()) {
+            Project project = findProject(meeting.getProjectId());
+            if (workspaceId.equals(project.getWorkspaceId())
+                    && isProjectParticipant(project, userId)) {
+                orderedMeetings.add(meeting);
+            }
+        }
         orderedMeetings.sort(Comparator.comparing(Meeting::getStartAt));
         List<MeetingResponse> responses = new ArrayList<>();
         for (Meeting meeting : orderedMeetings) {
@@ -109,6 +120,7 @@ public class MeetingServiceImpl implements MeetingService {
     @Transactional(readOnly = true)
     public List<MeetingResponse> getProjectMeetings(UUID projectId, UUID userId) {
         Project project = findProject(projectId);
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (!isProjectParticipant(project, userId)) {
             throw new ForbiddenException("You don't have access to this project's meetings");
         }
@@ -125,6 +137,7 @@ public class MeetingServiceImpl implements MeetingService {
     public MeetingResponse update(UUID meetingId, UUID userId, UpdateMeetingRequest request) {
         Meeting meeting = findMeeting(meetingId);
         Project project = findProject(meeting.getProjectId());
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (!isProjectManager(project, userId)) {
             throw new ForbiddenException("Only the project manager can edit a meeting");
         }
@@ -163,6 +176,7 @@ public class MeetingServiceImpl implements MeetingService {
     public void cancel(UUID meetingId, UUID userId) {
         Meeting meeting = findMeeting(meetingId);
         Project project = findProject(meeting.getProjectId());
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (!meeting.getOrganizerId().equals(userId)
                 && !isProjectAdmin(project, userId)
                 && !isProjectManager(project, userId)) {
@@ -184,8 +198,12 @@ public class MeetingServiceImpl implements MeetingService {
 
     private MeetingResponse toResponse(Meeting meeting) {
         List<MeetingAttendeeResponse> attendees = new ArrayList<>();
+        Project project = findProject(meeting.getProjectId());
         for (MeetingAttendee attendee : attendeeRepository.findByMeetingId(meeting.getId())) {
-            attendees.add(MeetingAttendeeResponse.fromEntity(attendee));
+            userRepository.findById(attendee.getUserId())
+                    .filter(user -> project.getWorkspaceId() != null
+                            && project.getWorkspaceId().equals(user.getWorkspaceId()))
+                    .ifPresent(user -> attendees.add(MeetingAttendeeResponse.fromEntity(attendee)));
         }
         return MeetingResponse.fromEntity(meeting, attendees);
     }
@@ -225,6 +243,7 @@ public class MeetingServiceImpl implements MeetingService {
                     .filter(user -> isProjectParticipant(project, user.getId()))
                     .orElseThrow(() -> new BadRequestException(
                             "Every attendee email must belong to an existing project participant"));
+            projectAccess.requireWorkspaceAndActive(project, attendee.getId());
             attendees.add(attendee);
         }
         return attendees;

@@ -24,6 +24,7 @@ import com.frietsync.backend.repository.sprint.SprintRepository;
 import com.frietsync.backend.repository.sprint.SprintCommentRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.sprint.SprintService;
+import com.frietsync.backend.service.impl.project.ProjectAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +45,7 @@ public class SprintServiceImpl implements SprintService {
     private final UserRepository userRepository;
     private final SprintAssignmentRequestRepository assignmentRequestRepository;
     private final SprintCommentRepository sprintCommentRepository;
+    private final ProjectAccess projectAccess;
 
     @Override
     @Transactional
@@ -243,6 +245,7 @@ public class SprintServiceImpl implements SprintService {
     }
 
     private void requireProjectManager(Project project, UUID userId) {
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (userId == null || !userId.equals(project.getProjectManagerId())) {
             throw new ForbiddenException("Only the project manager can perform this action");
         }
@@ -254,6 +257,7 @@ public class SprintServiceImpl implements SprintService {
     }
 
     private void requireProjectManagerOrTeamLead(Project project, UUID userId) {
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (userId != null && userId.equals(project.getProjectManagerId())) {
             requireProjectManager(project, userId);
             return;
@@ -283,6 +287,7 @@ public class SprintServiceImpl implements SprintService {
     private void checkMember(UUID projectId, UUID userId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (userId == null) {
             throw new ForbiddenException("You are not a member of this project");
         }
@@ -296,6 +301,8 @@ public class SprintServiceImpl implements SprintService {
     }
 
     private void checkContributor(UUID projectId, UUID contributorId) {
+        Project project = findProjectOrThrow(projectId);
+        projectAccess.requireWorkspaceAndActive(project, contributorId);
         User contributor = userRepository.findById(contributorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Contributor not found"));
         if (contributor.getRole() != Role.CONTRIBUTOR) {

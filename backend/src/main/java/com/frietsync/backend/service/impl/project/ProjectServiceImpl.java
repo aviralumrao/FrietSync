@@ -38,6 +38,7 @@ import com.frietsync.backend.repository.workspace.WorkspaceRepository;
 import com.frietsync.backend.service.project.ProjectService;
 import com.frietsync.backend.service.invite.InviteService;
 import com.frietsync.backend.service.project.ReleaseService;
+import com.frietsync.backend.service.impl.project.ProjectAccess;
 import com.frietsync.backend.service.issue.IssueService;
 import com.frietsync.backend.service.impl.issue.IssueHistoryRecorder;
 import lombok.RequiredArgsConstructor;
@@ -71,6 +72,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final InviteService inviteService;
     private final IssueService issueService;
     private final ReleaseService releaseService;
+    private final ProjectAccess projectAccess;
 
     @Override
     @Transactional
@@ -115,15 +117,19 @@ public class ProjectServiceImpl implements ProjectService {
     }
     @Override
     public List<ProjectResponse> myProjects(UUID userId) {
+        UUID workspaceId = projectAccess.requireActiveWorkspace(userId);
         List<ProjectResponse> responses = new ArrayList<>();
         for (Project project : projectRepository.findAllForUser(userId)) {
-            responses.add(toResponse(project));
+            if (workspaceId.equals(project.getWorkspaceId())) {
+                responses.add(toResponse(project));
+            }
         }
         return responses;
     }
     @Override
     public ProjectResponse get(UUID projectId, UUID userId) {
         Project project = find(projectId);
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (!isInvolved(project, userId)) {
             throw new ForbiddenException("You don't have access to this project");
         }
@@ -135,6 +141,7 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectResponse update(UUID projectId, ProjectRequest request, UUID userId) {
         Project project = projectRepository.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
+        projectAccess.requireWorkspaceAndActive(project, userId);
         boolean canEdit = userId.equals(project.getAdminId())
                 || userId.equals(project.getProjectManagerId());
         if (!canEdit) {
@@ -170,6 +177,7 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional
     public void delete(UUID projectId, UUID userId) {
         Project project = find(projectId);
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (!userId.equals(project.getAdminId())) {
             throw new ForbiddenException("Only the admin can delete this project");
         }
@@ -248,16 +256,18 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public List<MemberResponse> getMembers(UUID projectId, UUID userId) {
         Project project = find(projectId);
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (!isInvolved(project, userId)) {
             throw new ForbiddenException("You don't have access to this project");
         }
         Map<UUID, MemberResponse> responses = new LinkedHashMap<>();
-        addProjectUser(responses, project.getAdminId(), Role.ADMIN);
-        addProjectUser(responses, project.getProjectManagerId(), Role.PROJECT_MANAGER);
-        addProjectUser(responses, project.getTeamLeadId(), Role.TEAM_LEAD);
+        addProjectUser(responses, project.getWorkspaceId(), project.getAdminId(), Role.ADMIN);
+        addProjectUser(responses, project.getWorkspaceId(), project.getProjectManagerId(), Role.PROJECT_MANAGER);
+        addProjectUser(responses, project.getWorkspaceId(), project.getTeamLeadId(), Role.TEAM_LEAD);
         for (ProjectMember member : projectMemberRepository.findByProjectId(projectId)) {
             User user = userRepository.findById(member.getUserId()).orElse(null);
-            if (user != null && !responses.containsKey(user.getId())) {
+            if (user != null && project.getWorkspaceId().equals(user.getWorkspaceId())
+                    && !responses.containsKey(user.getId())) {
                 responses.put(user.getId(), toMemberResponse(user, member.getRole()));
             }
         }
@@ -273,6 +283,7 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional
     public void removeMember(UUID projectId, UUID memberUserId, UUID userId) {
         Project project = find(projectId);
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (!userId.equals(project.getAdminId())) {
             throw new ForbiddenException("Only the admin can remove members");
         }
@@ -296,11 +307,12 @@ public class ProjectServiceImpl implements ProjectService {
         projectRepository.save(project);
     }
 
-    private void addProjectUser(Map<UUID, MemberResponse> responses, UUID userId, Role role) {
+    private void addProjectUser(Map<UUID, MemberResponse> responses, UUID workspaceId, UUID userId, Role role) {
         if (userId == null) {
             return;
         }
         userRepository.findById(userId)
+                .filter(user -> workspaceId.equals(user.getWorkspaceId()))
                 .ifPresent(user -> responses.putIfAbsent(userId, toMemberResponse(user, role)));
     }
 

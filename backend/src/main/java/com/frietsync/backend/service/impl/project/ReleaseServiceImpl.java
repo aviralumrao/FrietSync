@@ -49,6 +49,7 @@ public class ReleaseServiceImpl implements ReleaseService {
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
     private final S3ObjectCleanupService cleanupService;
+    private final ProjectAccess projectAccess;
 
     @Value("${aws.s3.bucket:}")
     private String bucketName;
@@ -232,12 +233,14 @@ public class ReleaseServiceImpl implements ReleaseService {
     }
 
     private void requireManager(Project project, UUID userId) {
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (userId == null || !userId.equals(project.getProjectManagerId())) {
             throw new ForbiddenException("Only the project manager can manage releases");
         }
     }
 
     private void requireManagerOrTeamLead(Project project, UUID userId) {
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (userId == null || !(userId.equals(project.getProjectManagerId())
                 || userId.equals(project.getTeamLeadId()))) {
             throw new ForbiddenException("Only the project manager or team lead can attach issues");
@@ -245,6 +248,7 @@ public class ReleaseServiceImpl implements ReleaseService {
     }
 
     private void requireMember(Project project, UUID userId) {
+        projectAccess.requireWorkspaceAndActive(project, userId);
         boolean leader = userId != null && (userId.equals(project.getCreatedBy())
                 || userId.equals(project.getAdminId()) || userId.equals(project.getProjectManagerId())
                 || userId.equals(project.getTeamLeadId()));

@@ -19,6 +19,7 @@ import com.frietsync.backend.repository.project.ProjectMemberRepository;
 import com.frietsync.backend.repository.project.ProjectRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.integration.GitHubIntegrationService;
+import com.frietsync.backend.service.impl.project.ProjectAccess;
 import com.frietsync.backend.service.integration.GitHubApiClient;
 import com.frietsync.backend.service.integration.GitHubTokenCipher;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +54,7 @@ public class GitHubIntegrationServiceImpl implements GitHubIntegrationService {
     private final ProjectGitHubRepositoryRepository projectRepositoryLink;
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
+    private final ProjectAccess projectAccess;
     private final UserRepository userRepository;
     private final GitHubTokenCipher cipher;
     private final GitHubApiClient githubApi;
@@ -203,6 +205,7 @@ public class GitHubIntegrationServiceImpl implements GitHubIntegrationService {
     private Project requireProject(UUID projectId, UUID userId, boolean managerOnly) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
+        projectAccess.requireWorkspaceAndActive(project, userId);
         boolean member = userId.equals(project.getAdminId()) || userId.equals(project.getCreatedBy())
                 || userId.equals(project.getProjectManagerId()) || userId.equals(project.getTeamLeadId())
                 || memberRepository.existsByProjectIdAndUserId(projectId, userId);

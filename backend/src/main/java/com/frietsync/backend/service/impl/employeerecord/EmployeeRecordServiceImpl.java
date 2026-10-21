@@ -21,12 +21,14 @@ import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.repository.issue.IssueHistoryRepository;
 import com.frietsync.backend.repository.issue.IssueRepository;
 import com.frietsync.backend.repository.project.ProjectMemberRepository;
+import com.frietsync.backend.repository.project.ProjectRepository;
 import com.frietsync.backend.repository.sprint.SprintRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.employeerecord.EmployeeRecordService;
 import com.frietsync.backend.service.employeerecord.GithubActivity;
 import com.frietsync.backend.service.employeerecord.GithubActivityProvider;
 import com.frietsync.backend.service.employeerecord.GithubRepoActivity;
+import com.frietsync.backend.service.impl.project.ProjectAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +55,8 @@ public class EmployeeRecordServiceImpl implements EmployeeRecordService {
     private final IssueHistoryRepository historyRepository;
     private final SprintRepository sprintRepository;
     private final GithubActivityProvider githubActivityProvider;
+    private final ProjectRepository projectRepository;
+    private final ProjectAccess projectAccess;
 
     @Override
     @Transactional(readOnly = true)
@@ -106,19 +110,24 @@ public class EmployeeRecordServiceImpl implements EmployeeRecordService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         User viewer = userRepository.findById(viewerId)
                 .orElseThrow(() -> new ForbiddenException("You don't have permission to do this"));
-
-        if (viewer.getId().equals(target.getId())) {
-            return new Access(target, null);
-        }
-        if (viewer.getWorkspaceId() == null || !viewer.getWorkspaceId().equals(target.getWorkspaceId())) {
+        UUID workspaceId = projectAccess.requireActiveWorkspace(viewerId);
+        if (!workspaceId.equals(target.getWorkspaceId())) {
             throw new ResourceNotFoundException("User not found");
         }
+        Set<UUID> targetProjects = new HashSet<>();
+        projectRepository.findAllForUser(targetId).stream()
+                .filter(project -> workspaceId.equals(project.getWorkspaceId()))
+                .forEach(project -> targetProjects.add(project.getId()));
+
+        if (viewer.getId().equals(target.getId())) {
+            return new Access(target, targetProjects);
+        }
         if (viewer.getRole() == Role.ADMIN) {
-            return new Access(target, null);
+            return new Access(target, targetProjects);
         }
 
         Set<UUID> shared = new HashSet<>(memberRepository.findManagedProjectIds(viewerId));
-        shared.retainAll(memberRepository.findProjectIdsOfUser(targetId));
+        shared.retainAll(targetProjects);
         if (shared.isEmpty()) {
             throw new ForbiddenException("You don't have permission to view this employee record");
         }

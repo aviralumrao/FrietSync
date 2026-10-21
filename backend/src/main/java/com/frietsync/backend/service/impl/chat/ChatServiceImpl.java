@@ -14,6 +14,7 @@ import com.frietsync.backend.repository.project.ProjectRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.chat.ChatService;
 import com.frietsync.backend.service.notification.NotificationPublisher;
+import com.frietsync.backend.service.impl.project.ProjectAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -39,6 +40,7 @@ public class ChatServiceImpl implements ChatService {
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
     private final NotificationPublisher notificationPublisher;
+    private final ProjectAccess projectAccess;
 
     @Override
     @Transactional
@@ -99,6 +101,7 @@ public class ChatServiceImpl implements ChatService {
     @Transactional(readOnly = true)
     public void assertProjectAccess(UUID projectId, UUID userId) {
         Project project = findProject(projectId);
+        projectAccess.requireWorkspaceAndActive(project, userId);
         boolean projectRole = userId.equals(project.getCreatedBy())
                 || userId.equals(project.getAdminId())
                 || userId.equals(project.getProjectManagerId())

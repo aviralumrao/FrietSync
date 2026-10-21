@@ -58,6 +58,7 @@ public class IssueAssignmentServiceImpl implements IssueAssignmentService {
 
         Set<UUID> target = new LinkedHashSet<>(r.getUserIds());
         for (UUID uid : target) {
+            access.requireWorkspaceAndActive(project, uid);
             if (access.roleOf(project, uid) != Role.CONTRIBUTOR) {
                 throw new BadRequestException("Only project contributors can be assigned to issues");
             }
@@ -176,6 +177,7 @@ public class IssueAssignmentServiceImpl implements IssueAssignmentService {
         boolean approve = Boolean.TRUE.equals(d.getApprove());
         if (approve) {
             ensureAssignable(issue);
+            access.requireWorkspaceAndActive(project, req.getUserId());
             if (access.roleOf(project, req.getUserId()) != Role.CONTRIBUTOR) {
                 throw new BadRequestException("Only project contributors can be assigned to issues");
             }

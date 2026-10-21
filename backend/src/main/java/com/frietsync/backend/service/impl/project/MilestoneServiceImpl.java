@@ -32,6 +32,7 @@ public class MilestoneServiceImpl implements MilestoneService {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final SprintRepository sprintRepository;
+    private final ProjectAccess projectAccess;
 
     @Override
     @Transactional
@@ -119,12 +120,14 @@ public class MilestoneServiceImpl implements MilestoneService {
     }
 
     private void requireProjectManager(Project project, UUID userId) {
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (userId == null || !userId.equals(project.getProjectManagerId())) {
             throw new ForbiddenException("Only the project manager can manage milestones");
         }
     }
 
     private void requireProjectMember(Project project, UUID userId) {
+        projectAccess.requireWorkspaceAndActive(project, userId);
         boolean projectLeader = userId != null && (userId.equals(project.getCreatedBy())
                 || userId.equals(project.getAdminId())
                 || userId.equals(project.getProjectManagerId())

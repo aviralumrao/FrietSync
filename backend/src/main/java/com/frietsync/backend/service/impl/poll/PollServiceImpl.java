@@ -13,6 +13,7 @@ import com.frietsync.backend.entity.project.Project;
 import com.frietsync.backend.entity.project.Milestone;
 import com.frietsync.backend.entity.issue.Issue;
 import com.frietsync.backend.entity.sprint.Sprint;
+import com.frietsync.backend.entity.workspace.Workspace;
 import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
@@ -24,7 +25,9 @@ import com.frietsync.backend.repository.project.MilestoneRepository;
 import com.frietsync.backend.repository.project.ProjectMemberRepository;
 import com.frietsync.backend.repository.project.ProjectRepository;
 import com.frietsync.backend.repository.sprint.SprintRepository;
+import com.frietsync.backend.repository.workspace.WorkspaceRepository;
 import com.frietsync.backend.service.poll.PollService;
+import com.frietsync.backend.service.impl.project.ProjectAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -53,6 +56,8 @@ public class PollServiceImpl implements PollService {
     private final IssueRepository issueRepository;
     private final MilestoneRepository milestoneRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ProjectAccess projectAccess;
+    private final WorkspaceRepository workspaceRepository;
 
     @Override
     @Transactional
@@ -221,6 +226,10 @@ public class PollServiceImpl implements PollService {
             var pollResult = pollRepository.findByIdForUpdate(expiredPoll.getId());
             if (pollResult.isEmpty()) continue;
             Poll poll = pollResult.get();
+            Project project = projectRepository.findById(poll.getProjectId()).orElse(null);
+            Workspace workspace = project == null || project.getWorkspaceId() == null
+                    ? null : workspaceRepository.findById(project.getWorkspaceId()).orElse(null);
+            if (workspace == null || workspace.isPendingDeletion()) continue;
             if (poll.getStatus() == PollStatus.OPEN && poll.getEndsAt() != null
                     && !poll.getEndsAt().isAfter(now)) {
                 closePoll(poll);
@@ -266,6 +275,7 @@ public class PollServiceImpl implements PollService {
     }
 
     private void requireMember(Project project, UUID userId) {
+        projectAccess.requireWorkspaceAndActive(project, userId);
         if (userId == null || !(userId.equals(project.getCreatedBy())
                 || userId.equals(project.getAdminId()) || userId.equals(project.getProjectManagerId())
                 || userId.equals(project.getTeamLeadId())

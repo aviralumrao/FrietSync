@@ -31,6 +31,7 @@ import com.frietsync.backend.repository.sprint.SprintRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.briefing.BriefingService;
 import com.frietsync.backend.service.notification.NotificationService;
+import com.frietsync.backend.service.impl.project.ProjectAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -97,22 +98,25 @@ public class BriefingServiceImpl implements BriefingService {
     private final MeetingAttendeeRepository meetingAttendeeRepository;
     private final ProjectRepository projectRepository;
     private final SprintRepository sprintRepository;
+    private final ProjectAccess projectAccess;
 
     @Override
     @Transactional(readOnly = true)
     public DailyBriefingResponse today(UUID userId) {
+        UUID workspaceId = projectAccess.requireActiveWorkspace(userId);
         ZoneId zone = zoneOf(userId);
-        return build(userId, LocalDate.now(zone), zone);
+        return build(userId, LocalDate.now(zone), zone, workspaceId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public DailyBriefingResponse forDate(UUID userId, LocalDate date) {
+        UUID workspaceId = projectAccess.requireActiveWorkspace(userId);
         ZoneId zone = zoneOf(userId);
         if (date.isAfter(LocalDate.now(zone))) {
             throw new BadRequestException("Date is in the future");
         }
-        return build(userId, date, zone);
+        return build(userId, date, zone, workspaceId);
     }
 
     @Override
@@ -163,8 +167,12 @@ public class BriefingServiceImpl implements BriefingService {
         return toResponse(preference);
     }
 
-    private DailyBriefingResponse build(UUID userId, LocalDate date, ZoneId zone) {
+    private DailyBriefingResponse build(UUID userId, LocalDate date, ZoneId zone, UUID workspaceId) {
         boolean isToday = date.equals(LocalDate.now(zone));
+        Set<UUID> workspaceProjectIds = new HashSet<>();
+        projectRepository.findAllForUser(userId).stream()
+                .filter(project -> workspaceId.equals(project.getWorkspaceId()))
+                .forEach(project -> workspaceProjectIds.add(project.getId()));
 
         Instant dayStart = date.atStartOfDay(zone).toInstant();
         Instant dayEnd = date.plusDays(1).atStartOfDay(zone).toInstant().minusSeconds(1);
@@ -182,6 +190,7 @@ public class BriefingServiceImpl implements BriefingService {
             }
         }
         List<Issue> issues = issueRepository.findAllById(issueIds);
+        issues.removeIf(issue -> !workspaceProjectIds.contains(issue.getProjectId()));
 
         List<IssueSummaryResponse> overdue = new ArrayList<>();
         List<IssueSummaryResponse> dueToday = new ArrayList<>();
@@ -248,7 +257,7 @@ public class BriefingServiceImpl implements BriefingService {
         if (isToday) {
             meetingsFrom = moment;
         }
-        List<BriefingMeetingResponse> meetings = meetingsFor(userId, meetingsFrom, dayEnd);
+        List<BriefingMeetingResponse> meetings = meetingsFor(userId, meetingsFrom, dayEnd, workspaceProjectIds);
         List<ActivityResponse> updates = projectUpdates(userId, myIssues, newSince, moment);
 
         List<String> alerts = new ArrayList<>();
@@ -287,7 +296,9 @@ public class BriefingServiceImpl implements BriefingService {
                 .build();
     }
 
-    private List<BriefingMeetingResponse> meetingsFor(UUID userId, Instant from, Instant to) {
+    private List<BriefingMeetingResponse> meetingsFor(
+            UUID userId, Instant from, Instant to, Set<UUID> workspaceProjectIds
+    ) {
         Map<UUID, Meeting> found = new HashMap<>();
         for (Meeting meeting : meetingRepository.findByOrganizerIdOrderByStartAtAsc(userId)) {
             found.put(meeting.getId(), meeting);
@@ -304,6 +315,9 @@ public class BriefingServiceImpl implements BriefingService {
 
         List<Meeting> inWindow = new ArrayList<>();
         for (Meeting meeting : found.values()) {
+            if (!workspaceProjectIds.contains(meeting.getProjectId())) {
+                continue;
+            }
             Instant start = meeting.getStartAt();
             if (start == null) {
                 continue;
