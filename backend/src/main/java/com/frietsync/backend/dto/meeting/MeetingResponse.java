@@ -14,6 +14,7 @@ public record MeetingResponse(
         String agenda,
         Instant startAt,
         Instant endAt,
+        String googleMeetLink,
         List<MeetingAttendeeResponse> attendees,
         Instant createdAt,
         Instant updatedAt
@@ -28,6 +29,7 @@ public record MeetingResponse(
                 meeting.getAgenda(),
                 meeting.getStartAt(),
                 meeting.getEndAt(),
+                meeting.getGoogleMeetLink(),
                 attendees,
                 meeting.getCreatedAt(),
                 meeting.getUpdatedAt()

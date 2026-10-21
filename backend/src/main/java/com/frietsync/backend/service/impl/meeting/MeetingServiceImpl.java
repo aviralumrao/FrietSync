@@ -19,6 +19,7 @@ import com.frietsync.backend.repository.project.ProjectMemberRepository;
 import com.frietsync.backend.repository.project.ProjectRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.service.meeting.MeetingService;
+import com.frietsync.backend.service.integration.GoogleIntegrationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +42,7 @@ public class MeetingServiceImpl implements MeetingService {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
+    private final GoogleIntegrationService googleIntegrationService;
 
     @Override
     @Transactional
@@ -60,6 +62,14 @@ public class MeetingServiceImpl implements MeetingService {
         meeting.setAgenda(request.getAgenda().trim());
         meeting.setStartAt(request.getStartAt());
         meeting.setEndAt(request.getEndAt());
+        if (googleIntegrationService.isConnected(organizerId)) {
+            List<String> attendeeEmails = new ArrayList<>();
+            for (UUID attendeeId : attendeeIds) {
+                userRepository.findById(attendeeId).map(User::getEmail).ifPresent(attendeeEmails::add);
+            }
+            meeting.setGoogleMeetLink(googleIntegrationService.createMeetLink(organizerId,
+                    meeting.getTitle(), meeting.getAgenda(), meeting.getStartAt(), meeting.getEndAt(), attendeeEmails));
+        }
         Meeting savedMeeting = meetingRepository.save(meeting);
         for (UUID attendeeId : attendeeIds) {
             attendeeRepository.save(newAttendee(savedMeeting.getId(), attendeeId));
@@ -227,7 +237,9 @@ public class MeetingServiceImpl implements MeetingService {
     }
 
     private boolean canSchedule(Project project, UUID userId) {
-        if (isProjectManager(project, userId) || userId != null && userId.equals(project.getTeamLeadId())) {
+        if (isProjectManager(project, userId)
+                || userId != null && (userId.equals(project.getAdminId())
+                || userId.equals(project.getTeamLeadId()))) {
             return true;
         }
         ProjectMember member = projectMemberRepository

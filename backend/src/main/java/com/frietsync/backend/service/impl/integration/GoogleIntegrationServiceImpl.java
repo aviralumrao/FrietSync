@@ -28,7 +28,11 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -130,6 +134,60 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
             throw new OAuthExchangeException();
         }
         return access;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isConnected(UUID userId) {
+        return connectionRepository.findByUser_Id(userId).isPresent();
+    }
+
+    @Override
+    public String createMeetLink(UUID userId, String title, String description,
+                                 Instant startAt, Instant endAt, List<String> attendeeEmails) {
+        String accessToken = getValidAccessToken(userId);
+        List<Map<String, String>> attendees = new ArrayList<>();
+        for (String email : attendeeEmails) {
+            attendees.add(Map.of("email", email));
+        }
+        Map<String, Object> event = new HashMap<>();
+        event.put("summary", title);
+        event.put("description", description);
+        event.put("start", Map.of("dateTime", DateTimeFormatter.ISO_INSTANT.format(startAt)));
+        event.put("end", Map.of("dateTime", DateTimeFormatter.ISO_INSTANT.format(endAt)));
+        event.put("attendees", attendees);
+        event.put("conferenceData", Map.of("createRequest", Map.of(
+                "requestId", UUID.randomUUID().toString(),
+                "conferenceSolutionKey", Map.of("type", "hangoutsMeet"))));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        URI uri = UriComponentsBuilder.fromUriString(
+                        "https://www.googleapis.com/calendar/v3/calendars/primary/events")
+                .queryParam("conferenceDataVersion", 1)
+                .queryParam("sendUpdates", "all")
+                .build().encode().toUri();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = restTemplate.exchange(uri, HttpMethod.POST,
+                new HttpEntity<>(event, headers), Map.class).getBody();
+        String meetLink = response == null ? null : (String) response.get("hangoutLink");
+        if (meetLink == null && response != null && response.get("conferenceData") instanceof Map<?, ?> conference) {
+            Object rawEntryPoints = conference.get("entryPoints");
+            if (rawEntryPoints instanceof List<?> entryPoints) {
+                for (Object entryPoint : entryPoints) {
+                    if (entryPoint instanceof Map<?, ?> point && "video".equals(point.get("entryPointType"))
+                            && point.get("uri") instanceof String uriValue) {
+                        meetLink = uriValue;
+                        break;
+                    }
+                }
+            }
+        }
+        if (meetLink == null || meetLink.isBlank()) {
+            throw new OAuthExchangeException();
+        }
+        return meetLink;
     }
 
     @SuppressWarnings("unchecked")

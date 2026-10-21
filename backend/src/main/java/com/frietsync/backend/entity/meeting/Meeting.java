@@ -33,4 +33,7 @@ public class Meeting extends BaseEntity {
 
     @Column(name = "end_at", nullable = false)
     private Instant endAt;
+
+    @Column(name = "google_meet_link", length = 1000)
+    private String googleMeetLink;
 }
