@@ -22,6 +22,8 @@ public interface InviteRepository extends JpaRepository<Invite, UUID> {
 
     List<Invite> findByEmailAndStatusOrderByCreatedAtDesc(String email, InviteStatus status);
 
+    void deleteByWorkspaceId(UUID workspaceId);
+
     boolean existsByProjectIdAndEmailIgnoreCaseAndStatus(
             UUID projectId,
             String email,

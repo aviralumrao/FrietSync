@@ -17,6 +17,12 @@ public interface WorkspaceService {
 
     WorkspaceResponse getMyWorkspace(UUID userId);
 
+    WorkspaceResponse updateMyWorkspace(UUID userId, UpdateWorkspaceRequest request);
+
+    WorkspaceResponse deleteMyWorkspace(UUID userId);
+
+    List<MemberResponse> getMyWorkspaceMembers(UUID userId);
+
     WorkspaceResponse getWorkspace(UUID userId, UUID workspaceId);
 
     WorkspaceResponse updateWorkspace(
@@ -24,6 +30,12 @@ public interface WorkspaceService {
             UUID workspaceId,
             UpdateWorkspaceRequest request
     );
+
+    WorkspaceResponse deleteWorkspace(UUID userId, UUID workspaceId);
+
+    WorkspaceResponse restoreWorkspace(UUID userId, UUID workspaceId);
+
+    void purgeExpiredWorkspaces();
 
     List<MemberResponse> getWorkspaceMembers(UUID userId, UUID workspaceId);
 }

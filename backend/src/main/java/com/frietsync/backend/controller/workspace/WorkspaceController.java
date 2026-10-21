@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -57,6 +58,23 @@ public class WorkspaceController {
             @Valid @RequestBody UpdateWorkspaceRequest request
     ) {
         return workspaceService.updateWorkspace(userId, workspaceId, request);
+    }
+
+    @DeleteMapping("/{workspaceId}")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public WorkspaceResponse deleteWorkspace(
+            @AuthenticationPrincipal UUID userId,
+            @PathVariable UUID workspaceId
+    ) {
+        return workspaceService.deleteWorkspace(userId, workspaceId);
+    }
+
+    @PostMapping("/{workspaceId}/restore")
+    public WorkspaceResponse restoreWorkspace(
+            @AuthenticationPrincipal UUID userId,
+            @PathVariable UUID workspaceId
+    ) {
+        return workspaceService.restoreWorkspace(userId, workspaceId);
     }
 
     @GetMapping("/{workspaceId}/members")

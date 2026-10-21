@@ -85,6 +85,9 @@ public class ProjectServiceImpl implements ProjectService {
         }
         Workspace workspace = workspaceRepository.findByIdForUpdate(admin.getWorkspaceId())
                 .orElseThrow(() -> new BadRequestException("Workspace not found"));
+        if (workspace.isPendingDeletion()) {
+            throw new BadRequestException("Workspace is pending deletion");
+        }
         if (!userId.equals(workspace.getAdminId())) {
             throw new ForbiddenException("Only the workspace admin can create projects");
         }
@@ -196,8 +199,11 @@ public class ProjectServiceImpl implements ProjectService {
         if (workspaceId == null) {
             throw new BadRequestException("Project must belong to a workspace");
         }
-        workspaceRepository.findById(workspaceId)
+        Workspace workspace = workspaceRepository.findByIdForUpdate(workspaceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workspace not found"));
+        if (workspace.isPendingDeletion()) {
+            throw new BadRequestException("Workspace is pending deletion");
+        }
         User actor = userRepository.findById(actorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         requireSameWorkspace(actor, workspaceId, "You");

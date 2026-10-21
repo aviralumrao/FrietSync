@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Instant;
+import java.util.List;
 
 public interface WorkspaceRepository extends JpaRepository<Workspace, UUID> {
 
@@ -17,4 +19,6 @@ public interface WorkspaceRepository extends JpaRepository<Workspace, UUID> {
     Optional<Workspace> findByIdForUpdate(
             @Param("workspaceId") UUID workspaceId
     );
+
+    List<Workspace> findAllByDeletionRequestedAtLessThanEqual(Instant cutoff);
 }

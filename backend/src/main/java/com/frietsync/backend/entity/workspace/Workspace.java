@@ -30,6 +30,9 @@ public class Workspace {
     @Column(name = "created_on", nullable = false, updatable = false)
     private Instant createdOn;
 
+    @Column(name = "deletion_requested_at")
+    private Instant deletionRequestedAt;
+
     @PrePersist
     public void prePersist() {
         if (id == null) {
@@ -38,5 +41,9 @@ public class Workspace {
         if (createdOn == null) {
             createdOn = Instant.now();
         }
+    }
+
+    public boolean isPendingDeletion() {
+        return deletionRequestedAt != null;
     }
 }

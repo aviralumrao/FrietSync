@@ -126,6 +126,9 @@ public class InviteServiceImpl implements InviteService {
 
         Workspace workspace = workspaceRepository.findByIdForUpdate(admin.getWorkspaceId())
                 .orElseThrow(() -> new BadRequestException("Workspace not found"));
+        if (workspace.isPendingDeletion()) {
+            throw new BadRequestException("Workspace is pending deletion");
+        }
         if (!adminId.equals(workspace.getAdminId())) {
             throw new BadRequestException("Only the workspace owner can send invitations");
         }
@@ -348,8 +351,11 @@ public class InviteServiceImpl implements InviteService {
                         || !project.getWorkspaceId().equals(invite.getWorkspaceId())) {
                     throw new BadRequestException("You must belong to the project's workspace");
                 }
-                Workspace workspace = workspaceRepository.findById(project.getWorkspaceId())
+                Workspace workspace = workspaceRepository.findByIdForUpdate(project.getWorkspaceId())
                         .orElseThrow(() -> new BadRequestException("Project workspace not found"));
+                if (workspace.isPendingDeletion()) {
+                    throw new BadRequestException("Workspace is pending deletion");
+                }
                 if (!workspace.getAdminId().equals(project.getAdminId())) {
                     throw new BadRequestException("Project admin must be the workspace admin");
                 }
@@ -393,6 +399,11 @@ public class InviteServiceImpl implements InviteService {
             }
 
             case WORKSPACE_INVITE -> {
+                Workspace workspace = workspaceRepository.findByIdForUpdate(invite.getWorkspaceId())
+                        .orElseThrow(() -> new BadRequestException("Workspace not found"));
+                if (workspace.isPendingDeletion()) {
+                    throw new BadRequestException("Workspace is pending deletion");
+                }
                 if (user.getWorkspaceId() != null) {
                     throw new BadRequestException(
                             "You already belong to a workspace. Leave it before joining another."
@@ -413,6 +424,9 @@ public class InviteServiceImpl implements InviteService {
                 Workspace workspace = workspaceRepository
                         .findByIdForUpdate(invite.getWorkspaceId())
                         .orElseThrow(() -> new BadRequestException("Workspace not found"));
+                if (workspace.isPendingDeletion()) {
+                    throw new BadRequestException("Workspace is pending deletion");
+                }
                 if (workspace.getAdminId().equals(userId)) {
                     throw new BadRequestException(
                             "You are already the owner of this workspace"

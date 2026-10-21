@@ -7,6 +7,8 @@ public record WorkspaceResponse(
         UUID id,
         String name,
         UUID adminId,
-        Instant createdOn
+        Instant createdOn,
+        Instant deletionRequestedAt,
+        Instant permanentlyDeleteAt
 ) {
 }
