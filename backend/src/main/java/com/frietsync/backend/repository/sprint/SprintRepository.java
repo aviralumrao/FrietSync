@@ -21,6 +21,8 @@ public interface SprintRepository extends JpaRepository<Sprint, UUID> {
 
     List<Sprint> findByMilestoneId(UUID milestoneId);
 
+    List<Sprint> findByAssignedContributorId(UUID assignedContributorId);
+
     long countByProjectId(UUID projectId);
 
     long countByProjectIdAndStatus(UUID projectId, SprintStatus status);
