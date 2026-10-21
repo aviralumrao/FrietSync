@@ -6,12 +6,16 @@ import java.util.List;
 import java.util.UUID;
 
 public interface GoogleIntegrationService {
+    record GoogleMeetEvent(String calendarEventId, String meetLink) {
+    }
+
     URI createAuthorizationUri(UUID userId);
     UUID consumeState(String state);
     void complete(UUID userId, String code);
     void disconnect(UUID userId);
     String getValidAccessToken(UUID userId);
     boolean isConnected(UUID userId);
-    String createMeetLink(UUID userId, String title, String description,
-                          Instant startAt, Instant endAt, List<String> attendeeEmails);
+    GoogleMeetEvent createMeetEvent(UUID userId, String title, String description,
+                                    Instant startAt, Instant endAt, List<String> attendeeEmails);
+    void deleteCalendarEvent(UUID userId, String calendarEventId);
 }

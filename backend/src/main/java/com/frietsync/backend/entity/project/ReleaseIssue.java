@@ -18,7 +18,6 @@ public class ReleaseIssue extends BaseEntity {
     @Column(name = "release_id", nullable = false)
     private UUID releaseId;
 
-    // Issue tracking is not modeled in this codebase yet; this stores the external/domain issue UUID.
     @Column(name = "issue_id", nullable = false)
     private UUID issueId;
 }

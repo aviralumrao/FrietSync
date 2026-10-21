@@ -36,4 +36,7 @@ public class Meeting extends BaseEntity {
 
     @Column(name = "google_meet_link", length = 1000)
     private String googleMeetLink;
+
+    @Column(name = "google_calendar_event_id", length = 255)
+    private String googleCalendarEventId;
 }

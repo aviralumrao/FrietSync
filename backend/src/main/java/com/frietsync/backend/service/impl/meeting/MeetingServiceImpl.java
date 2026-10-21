@@ -7,7 +7,6 @@ import com.frietsync.backend.dto.meeting.UpdateMeetingRequest;
 import com.frietsync.backend.entity.meeting.Meeting;
 import com.frietsync.backend.entity.meeting.MeetingAttendee;
 import com.frietsync.backend.entity.project.Project;
-import com.frietsync.backend.entity.project.ProjectMember;
 import com.frietsync.backend.entity.user.Role;
 import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.exception.BadRequestException;
@@ -49,8 +48,8 @@ public class MeetingServiceImpl implements MeetingService {
     @Transactional
     public MeetingResponse create(UUID projectId, UUID organizerId, CreateMeetingRequest request) {
         Project project = findProject(projectId);
-        if (!canSchedule(project, organizerId)) {
-            throw new ForbiddenException("Only the project manager or team lead can schedule meetings");
+        if (!isProjectParticipant(project, organizerId)) {
+            throw new ForbiddenException("Only project participants can schedule meetings");
         }
         validateMeetingTimes(request.getStartAt(), request.getEndAt());
         List<User> attendees = resolveProjectAttendees(project, request.getAttendeeEmails());
@@ -67,8 +66,10 @@ public class MeetingServiceImpl implements MeetingService {
             for (User attendee : attendees) {
                 attendeeEmails.add(attendee.getEmail());
             }
-            meeting.setGoogleMeetLink(googleIntegrationService.createMeetLink(organizerId,
-                    meeting.getTitle(), meeting.getAgenda(), meeting.getStartAt(), meeting.getEndAt(), attendeeEmails));
+            GoogleIntegrationService.GoogleMeetEvent googleMeetEvent = googleIntegrationService.createMeetEvent(organizerId,
+                    meeting.getTitle(), meeting.getAgenda(), meeting.getStartAt(), meeting.getEndAt(), attendeeEmails);
+            meeting.setGoogleMeetLink(googleMeetEvent.meetLink());
+            meeting.setGoogleCalendarEventId(googleMeetEvent.calendarEventId());
         }
         Meeting savedMeeting = meetingRepository.save(meeting);
         for (User attendee : attendees) {
@@ -162,8 +163,13 @@ public class MeetingServiceImpl implements MeetingService {
     public void cancel(UUID meetingId, UUID userId) {
         Meeting meeting = findMeeting(meetingId);
         Project project = findProject(meeting.getProjectId());
-        if (!meeting.getOrganizerId().equals(userId) && !isProjectManager(project, userId)) {
-            throw new ForbiddenException("Only the organizer or project manager can cancel a meeting");
+        if (!meeting.getOrganizerId().equals(userId)
+                && !isProjectAdmin(project, userId)
+                && !isProjectManager(project, userId)) {
+            throw new ForbiddenException("Only the organizer, project admin, or project manager can cancel a meeting");
+        }
+        if (meeting.getGoogleCalendarEventId() != null) {
+            googleIntegrationService.deleteCalendarEvent(meeting.getOrganizerId(), meeting.getGoogleCalendarEventId());
         }
         attendeeRepository.deleteByMeetingId(meetingId);
         meetingRepository.delete(meeting);
@@ -237,16 +243,8 @@ public class MeetingServiceImpl implements MeetingService {
         return projectMemberRepository.existsByProjectIdAndUserId(project.getId(), userId);
     }
 
-    private boolean canSchedule(Project project, UUID userId) {
-        if (isProjectManager(project, userId)
-                || userId != null && (userId.equals(project.getAdminId())
-                || userId.equals(project.getTeamLeadId()))) {
-            return true;
-        }
-        ProjectMember member = projectMemberRepository
-                .findByProjectIdAndUserId(project.getId(), userId)
-                .orElse(null);
-        return member != null && member.getRole() == Role.TEAM_LEAD;
+    private boolean isProjectAdmin(Project project, UUID userId) {
+        return userId != null && userId.equals(project.getAdminId());
     }
 
     private boolean isProjectManager(Project project, UUID userId) {

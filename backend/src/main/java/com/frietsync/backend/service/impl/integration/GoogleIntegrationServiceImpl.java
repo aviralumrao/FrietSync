@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
@@ -143,8 +144,9 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
     }
 
     @Override
-    public String createMeetLink(UUID userId, String title, String description,
-                                 Instant startAt, Instant endAt, List<String> attendeeEmails) {
+    public GoogleIntegrationService.GoogleMeetEvent createMeetEvent(
+            UUID userId, String title, String description,
+            Instant startAt, Instant endAt, List<String> attendeeEmails) {
         String accessToken = getValidAccessToken(userId);
         List<Map<String, String>> attendees = new ArrayList<>();
         for (String email : attendeeEmails) {
@@ -172,6 +174,7 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
         Map<String, Object> response = restTemplate.exchange(uri, HttpMethod.POST,
                 new HttpEntity<>(event, headers), Map.class).getBody();
         String meetLink = response == null ? null : (String) response.get("hangoutLink");
+        String eventId = response == null ? null : (String) response.get("id");
         if (meetLink == null && response != null && response.get("conferenceData") instanceof Map<?, ?> conference) {
             Object rawEntryPoints = conference.get("entryPoints");
             if (rawEntryPoints instanceof List<?> entryPoints) {
@@ -184,10 +187,28 @@ public class GoogleIntegrationServiceImpl implements GoogleIntegrationService {
                 }
             }
         }
-        if (meetLink == null || meetLink.isBlank()) {
+        if (meetLink == null || meetLink.isBlank() || eventId == null || eventId.isBlank()) {
+            if (eventId != null && !eventId.isBlank()) {
+                deleteCalendarEvent(userId, eventId);
+            }
             throw new OAuthExchangeException();
         }
-        return meetLink;
+        return new GoogleIntegrationService.GoogleMeetEvent(eventId, meetLink);
+    }
+
+    @Override
+    public void deleteCalendarEvent(UUID userId, String calendarEventId) {
+        String accessToken = getValidAccessToken(userId);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        URI uri = UriComponentsBuilder.fromUriString(
+                        "https://www.googleapis.com/calendar/v3/calendars/primary/events")
+                .pathSegment(calendarEventId)
+                .queryParam("sendUpdates", "all")
+                .build().encode().toUri();
+        try {
+            restTemplate.exchange(uri, HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
+        } catch (HttpClientErrorException.NotFound alreadyDeleted) { }
     }
 
     @SuppressWarnings("unchecked")

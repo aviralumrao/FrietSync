@@ -341,7 +341,6 @@ public class ReplayServiceImpl implements ReplayService {
         facts.counts.put(ReplayPhaseType.RESOLVED, finishedCount);
         facts.counts.put(ReplayPhaseType.COMPLETED, 0);
 
-        // Causes
         facts.causes.put(ReplayPhaseType.CREATED, "The project was set up");
 
         if (project.getStartDate() != null) {
