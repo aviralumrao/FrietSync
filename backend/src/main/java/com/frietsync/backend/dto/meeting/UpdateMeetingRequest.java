@@ -1,11 +1,11 @@
 package com.frietsync.backend.dto.meeting;
 
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Email;
 import lombok.Data;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 @Data
 public class UpdateMeetingRequest {
@@ -20,5 +20,5 @@ public class UpdateMeetingRequest {
 
     private Instant endAt;
 
-    private List<UUID> attendeeIds;
+    private List<@Email String> attendeeEmails;
 }

@@ -53,7 +53,7 @@ public class MeetingController {
     @PatchMapping("/meetings/{meetingId}")
     public ResponseEntity<MeetingResponse> update(
             @PathVariable UUID meetingId,
-            @RequestBody UpdateMeetingRequest request,
+            @Valid @RequestBody UpdateMeetingRequest request,
             @AuthenticationPrincipal UUID userId) {
         return ResponseEntity.ok(meetingService.update(meetingId, userId, request));
     }

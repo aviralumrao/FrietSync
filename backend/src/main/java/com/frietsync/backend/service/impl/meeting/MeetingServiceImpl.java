@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -52,8 +53,7 @@ public class MeetingServiceImpl implements MeetingService {
             throw new ForbiddenException("Only the project manager or team lead can schedule meetings");
         }
         validateMeetingTimes(request.getStartAt(), request.getEndAt());
-        List<UUID> attendeeIds = normalizeAttendeeIds(request.getAttendeeIds());
-        validateProjectAttendees(project, attendeeIds);
+        List<User> attendees = resolveProjectAttendees(project, request.getAttendeeEmails());
 
         Meeting meeting = new Meeting();
         meeting.setProjectId(projectId);
@@ -64,15 +64,15 @@ public class MeetingServiceImpl implements MeetingService {
         meeting.setEndAt(request.getEndAt());
         if (googleIntegrationService.isConnected(organizerId)) {
             List<String> attendeeEmails = new ArrayList<>();
-            for (UUID attendeeId : attendeeIds) {
-                userRepository.findById(attendeeId).map(User::getEmail).ifPresent(attendeeEmails::add);
+            for (User attendee : attendees) {
+                attendeeEmails.add(attendee.getEmail());
             }
             meeting.setGoogleMeetLink(googleIntegrationService.createMeetLink(organizerId,
                     meeting.getTitle(), meeting.getAgenda(), meeting.getStartAt(), meeting.getEndAt(), attendeeEmails));
         }
         Meeting savedMeeting = meetingRepository.save(meeting);
-        for (UUID attendeeId : attendeeIds) {
-            attendeeRepository.save(newAttendee(savedMeeting.getId(), attendeeId));
+        for (User attendee : attendees) {
+            attendeeRepository.save(newAttendee(savedMeeting.getId(), attendee.getId()));
         }
         return toResponse(savedMeeting);
     }
@@ -147,12 +147,11 @@ public class MeetingServiceImpl implements MeetingService {
         meeting.setStartAt(startAt);
         meeting.setEndAt(endAt);
 
-        if (request.getAttendeeIds() != null) {
-            List<UUID> attendeeIds = normalizeAttendeeIds(request.getAttendeeIds());
-            validateProjectAttendees(project, attendeeIds);
+        if (request.getAttendeeEmails() != null) {
+            List<User> attendees = resolveProjectAttendees(project, request.getAttendeeEmails());
             attendeeRepository.deleteByMeetingId(meetingId);
-            for (UUID attendeeId : attendeeIds) {
-                attendeeRepository.save(newAttendee(meetingId, attendeeId));
+            for (User attendee : attendees) {
+                attendeeRepository.save(newAttendee(meetingId, attendee.getId()));
             }
         }
         return toResponse(meetingRepository.save(meeting));
@@ -201,26 +200,28 @@ public class MeetingServiceImpl implements MeetingService {
         }
     }
 
-    private List<UUID> normalizeAttendeeIds(List<UUID> attendeeIds) {
-        if (attendeeIds == null) {
-            throw new BadRequestException("Attendee IDs are required");
+    private List<User> resolveProjectAttendees(Project project, List<String> attendeeEmails) {
+        if (attendeeEmails == null) {
+            throw new BadRequestException("Attendee emails are required");
         }
-        List<UUID> uniqueAttendeeIds = new ArrayList<>();
-        for (UUID attendeeId : attendeeIds) {
-            if (!uniqueAttendeeIds.contains(attendeeId)) {
-                uniqueAttendeeIds.add(attendeeId);
+        List<User> attendees = new ArrayList<>();
+        List<String> normalizedEmails = new ArrayList<>();
+        for (String email : attendeeEmails) {
+            if (email == null || email.isBlank()) {
+                throw new BadRequestException("Attendee emails must be valid email addresses");
             }
-        }
-        return uniqueAttendeeIds;
-    }
-
-    private void validateProjectAttendees(Project project, List<UUID> attendeeIds) {
-        for (UUID attendeeId : attendeeIds) {
-            if (attendeeId == null || !userRepository.existsById(attendeeId)
-                    || !isProjectParticipant(project, attendeeId)) {
-                throw new BadRequestException("Every attendee must be an existing project participant");
+            String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+            if (normalizedEmails.contains(normalizedEmail)) {
+                continue;
             }
+            normalizedEmails.add(normalizedEmail);
+            User attendee = userRepository.findByEmailIgnoreCase(email.trim())
+                    .filter(user -> isProjectParticipant(project, user.getId()))
+                    .orElseThrow(() -> new BadRequestException(
+                            "Every attendee email must belong to an existing project participant"));
+            attendees.add(attendee);
         }
+        return attendees;
     }
 
     private boolean isProjectParticipant(Project project, UUID userId) {
