@@ -38,6 +38,16 @@ public class GitHubApiClient {
                 new ParameterizedTypeReference<Map<String, Object>>() { }).getBody();
     }
 
+    public Map<String, Object> patchMap(String path, Map<String, Object> body, String token) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        headers.setAccept(List.of(MediaType.parseMediaType("application/vnd.github+json")));
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-GitHub-Api-Version", "2022-11-28");
+        return restTemplate.exchange(API_URL + path, HttpMethod.PATCH, new HttpEntity<>(body, headers),
+                new ParameterizedTypeReference<Map<String, Object>>() { }).getBody();
+    }
+
     public Map<String, Object> postForm(String url, HttpEntity<?> request) {
         return restTemplate.exchange(url, HttpMethod.POST, request,
                 new ParameterizedTypeReference<Map<String, Object>>() { }).getBody();

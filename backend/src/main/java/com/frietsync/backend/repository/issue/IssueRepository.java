@@ -35,6 +35,8 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
 
     List<Issue> findByProjectId(UUID projectId);
 
+    List<Issue> findByGithubIssueNumberIsNotNullAndDeletedAtIsNull();
+
     List<Issue> findByCreatedByAndDeletedAtIsNull(UUID createdBy);
 
     @Query("select i from Issue i where i.deletedAt is null and i.id in "

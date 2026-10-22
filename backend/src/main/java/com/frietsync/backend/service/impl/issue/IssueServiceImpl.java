@@ -159,10 +159,12 @@ public class IssueServiceImpl implements IssueService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public IssueResponse get(UUID issueId, UUID userId) {
         Issue issue = access.issue(issueId);
         access.requireMember(access.project(issue.getProjectId()), userId);
+        if (issue.getGithubIssueNumber() != null) {
+            return githubIssueLinkService.refreshStatus(issueId, userId);
+        }
         return mapper.toResponse(issue);
     }
 
@@ -290,6 +292,7 @@ public class IssueServiceImpl implements IssueService {
             issue.setResolvedAt(null);
         }
         issueRepository.save(issue);
+        githubIssueLinkService.syncStatus(issue, userId);
 
         history.record(issueId, userId,
                 approve ? IssueHistoryAction.REVIEW_APPROVED : IssueHistoryAction.REVIEW_REJECTED,
