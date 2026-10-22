@@ -105,6 +105,21 @@ public class IssueServiceImpl implements IssueService {
 
     @Override
     @Transactional(readOnly = true)
+    public IssuePageResponse<IssueResponse> listAssignedToMe(UUID userId, int page, int size) {
+        UUID workspaceId = access.requireActiveWorkspace(userId);
+        Page<Issue> result = issueRepository.findAssignedToUserInWorkspace(
+                userId, workspaceId, pageRequest(page, size));
+        return IssuePageResponse.<IssueResponse>builder()
+                .items(mapper.toResponses(result.getContent()))
+                .page(result.getNumber())
+                .size(result.getSize())
+                .totalElements(result.getTotalElements())
+                .totalPages(result.getTotalPages())
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public IssueResponse get(UUID issueId, UUID userId) {
         Issue issue = access.issue(issueId);
         access.requireMember(access.project(issue.getProjectId()), userId);
@@ -294,11 +309,14 @@ public class IssueServiceImpl implements IssueService {
         Project project = access.project(issue.getProjectId());
         access.require(project, userId, Role.PROJECT_MANAGER, Role.TEAM_LEAD);
 
-        Label label = labelRepository.findById(request.getLabelId())
-                .orElseThrow(() -> new ResourceNotFoundException("Label not found"));
-        if (!label.getProjectId().equals(issue.getProjectId())) {
-            throw new BadRequestException("Label does not belong to this project");
-        }
+        String name = request.getName().trim();
+        Label label = labelRepository.findByProjectIdAndNameIgnoreCase(issue.getProjectId(), name)
+                .orElseGet(() -> {
+                    Label newLabel = new Label();
+                    newLabel.setProjectId(issue.getProjectId());
+                    newLabel.setName(name);
+                    return labelRepository.save(newLabel);
+                });
         if (issueLabelRepository.existsByIssueIdAndLabelId(issueId, label.getId())) {
             throw new BadRequestException("Label is already on this issue");
         }

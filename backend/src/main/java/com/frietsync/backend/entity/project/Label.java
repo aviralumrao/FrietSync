@@ -21,7 +21,7 @@ public class Label extends BaseEntity {
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, length = 20)
     private String name;
 
     @Column(length = 7)

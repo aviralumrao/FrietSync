@@ -49,6 +49,14 @@ public class IssueController {
         return ResponseEntity.ok(issueService.listForProject(projectId, userId, page, size));
     }
 
+    @GetMapping("/issues/me")
+    public ResponseEntity<IssuePageResponse<IssueResponse>> assignedToMe(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal UUID userId) {
+        return ResponseEntity.ok(issueService.listAssignedToMe(userId, page, size));
+    }
+
     @GetMapping("/issues/{issueId}")
     public ResponseEntity<IssueResponse> get(@PathVariable UUID issueId,
                                              @AuthenticationPrincipal UUID userId) {

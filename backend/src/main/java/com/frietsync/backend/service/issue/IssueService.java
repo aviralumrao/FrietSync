@@ -17,6 +17,8 @@ public interface IssueService {
 
     IssuePageResponse<IssueResponse> listForProject(UUID projectId, UUID userId, int page, int size);
 
+    IssuePageResponse<IssueResponse> listAssignedToMe(UUID userId, int page, int size);
+
     IssueResponse get(UUID issueId, UUID userId);
 
     IssueResponse update(UUID issueId, IssueUpdateRequest request, UUID userId);

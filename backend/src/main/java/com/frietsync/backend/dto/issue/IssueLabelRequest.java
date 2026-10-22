@@ -1,13 +1,13 @@
 package com.frietsync.backend.dto.issue;
 
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
-
-import java.util.UUID;
 
 @Data
 public class IssueLabelRequest {
 
-    @NotNull(message = "labelId is required")
-    private UUID labelId;
+    @NotBlank(message = "Label name is required")
+    @Size(max = 20, message = "Label name cannot exceed 20 characters")
+    private String name;
 }
