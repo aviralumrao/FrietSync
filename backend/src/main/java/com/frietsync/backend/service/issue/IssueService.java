@@ -1,6 +1,7 @@
 package com.frietsync.backend.service.issue;
 
 import com.frietsync.backend.dto.issue.IssueHistoryResponse;
+import com.frietsync.backend.dto.issue.IssueCreateV2Request;
 import com.frietsync.backend.dto.issue.IssuePageResponse;
 import com.frietsync.backend.dto.issue.IssueLabelRequest;
 import com.frietsync.backend.dto.issue.IssueRequest;
@@ -14,6 +15,8 @@ import java.util.UUID;
 
 public interface IssueService {
     IssueResponse create(UUID projectId, IssueRequest request, UUID userId);
+
+    IssueResponse createV2(UUID projectId, IssueCreateV2Request request, UUID userId);
 
     IssuePageResponse<IssueResponse> listForProject(UUID projectId, UUID userId, int page, int size);
 

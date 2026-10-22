@@ -1,6 +1,7 @@
 package com.frietsync.backend.controller.issue;
 
 import com.frietsync.backend.dto.issue.IssuePageResponse;
+import com.frietsync.backend.dto.issue.GitHubIssueLinkRequest;
 import com.frietsync.backend.dto.issue.IssueHistoryResponse;
 import com.frietsync.backend.dto.issue.IssueLabelRequest;
 import com.frietsync.backend.dto.issue.IssueRequest;
@@ -9,6 +10,7 @@ import com.frietsync.backend.dto.issue.IssueUpdateRequest;
 import com.frietsync.backend.dto.issue.ReviewRequest;
 import com.frietsync.backend.dto.project.LabelResponse;
 import com.frietsync.backend.service.issue.IssueService;
+import com.frietsync.backend.service.integration.GitHubIssueLinkService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,6 +36,21 @@ import java.util.UUID;
 public class IssueController {
 
     private final IssueService issueService;
+    private final GitHubIssueLinkService githubIssueLinkService;
+
+    @PutMapping("/issues/{issueId}/github-issue")
+    public ResponseEntity<IssueResponse> linkGitHubIssue(@PathVariable UUID issueId,
+                                                         @Valid @RequestBody GitHubIssueLinkRequest request,
+                                                         @AuthenticationPrincipal UUID userId) {
+        return ResponseEntity.ok(githubIssueLinkService.link(issueId, request.issueNumber(), userId));
+    }
+
+    @DeleteMapping("/issues/{issueId}/github-issue")
+    public ResponseEntity<Void> unlinkGitHubIssue(@PathVariable UUID issueId,
+                                                  @AuthenticationPrincipal UUID userId) {
+        githubIssueLinkService.unlink(issueId, userId);
+        return ResponseEntity.noContent().build();
+    }
 
     @PostMapping({"/projects/{projectId}/issues", "/projects/{projectId}/issue"})
     public ResponseEntity<IssueResponse> create(@PathVariable UUID projectId,

@@ -14,6 +14,7 @@ import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.repository.integration.GitHubConnectionRepository;
 import com.frietsync.backend.repository.integration.GitHubOAuthStateRepository;
+import com.frietsync.backend.repository.issue.IssueRepository;
 import com.frietsync.backend.repository.project.ProjectGitHubRepositoryRepository;
 import com.frietsync.backend.repository.project.ProjectMemberRepository;
 import com.frietsync.backend.repository.project.ProjectRepository;
@@ -51,6 +52,7 @@ public class GitHubIntegrationServiceImpl implements GitHubIntegrationService {
     private final GitHubOAuthProperties properties;
     private final GitHubOAuthStateRepository stateRepository;
     private final GitHubConnectionRepository connectionRepository;
+    private final IssueRepository issueRepository;
     private final ProjectGitHubRepositoryRepository projectRepositoryLink;
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
@@ -130,6 +132,10 @@ public class GitHubIntegrationServiceImpl implements GitHubIntegrationService {
         githubApi.getMap("/repos/" + owner + "/" + name, token);
         ProjectGitHubRepository linked = projectRepositoryLink.findByProjectId(project.getId())
                 .orElseGet(ProjectGitHubRepository::new);
+        if (linked.getRepositoryOwner() != null && (!linked.getRepositoryOwner().equalsIgnoreCase(owner)
+                || !linked.getRepositoryName().equalsIgnoreCase(name))) {
+            issueRepository.clearGitHubLinksByProjectId(project.getId());
+        }
         linked.setProjectId(project.getId());
         linked.setRepositoryOwner(owner);
         linked.setRepositoryName(name);
@@ -140,7 +146,10 @@ public class GitHubIntegrationServiceImpl implements GitHubIntegrationService {
     @Transactional
     public void unlinkRepository(UUID projectId, UUID userId) {
         Project project = requireProject(projectId, userId, true);
-        projectRepositoryLink.findByProjectId(project.getId()).ifPresent(projectRepositoryLink::delete);
+        projectRepositoryLink.findByProjectId(project.getId()).ifPresent(link -> {
+            issueRepository.clearGitHubLinksByProjectId(project.getId());
+            projectRepositoryLink.delete(link);
+        });
     }
 
     @Override

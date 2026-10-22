@@ -60,4 +60,16 @@ public class Issue extends BaseEntity {
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
+
+    @Column(name = "github_issue_number")
+    private Integer githubIssueNumber;
+
+    @Column(name = "github_issue_title", length = 500)
+    private String githubIssueTitle;
+
+    @Column(name = "github_issue_url", length = 1000)
+    private String githubIssueUrl;
+
+    @Column(name = "github_issue_repository", length = 511)
+    private String githubIssueRepository;
 }

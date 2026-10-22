@@ -1,6 +1,8 @@
 package com.frietsync.backend.service.impl.issue;
 
 import com.frietsync.backend.dto.issue.IssueHistoryResponse;
+import com.frietsync.backend.dto.issue.GitHubIssueAction;
+import com.frietsync.backend.dto.issue.IssueCreateV2Request;
 import com.frietsync.backend.dto.issue.IssuePageResponse;
 import com.frietsync.backend.dto.issue.IssueLabelRequest;
 import com.frietsync.backend.dto.issue.IssueRequest;
@@ -30,6 +32,7 @@ import com.frietsync.backend.repository.project.ReleaseIssueRepository;
 import com.frietsync.backend.service.impl.project.ProjectAccess;
 import com.frietsync.backend.service.issue.IssueAttachmentService;
 import com.frietsync.backend.service.issue.IssueService;
+import com.frietsync.backend.service.integration.GitHubIssueLinkService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,14 +66,52 @@ public class IssueServiceImpl implements IssueService {
     private final IssueHistoryRecorder history;
     private final IssueLinkRepository issueLinkRepository;
     private final ReleaseIssueRepository releaseIssueRepository;
+    private final GitHubIssueLinkService githubIssueLinkService;
 
     @Override
     public IssueResponse create(UUID projectId, IssueRequest r, UUID userId) {
+        Issue issue = createIssue(projectId, r.getTitle(), r.getDescription(), r.getPriority(), r.getDueDate(),
+                r.getEstimatedHours(), userId, false);
+        if (r.getGithubIssueNumber() != null) {
+            return githubIssueLinkService.link(issue.getId(), r.getGithubIssueNumber(), userId);
+        }
+        return mapper.toResponse(issue);
+    }
+
+    @Override
+    public IssueResponse createV2(UUID projectId, IssueCreateV2Request request, UUID userId) {
+        GitHubIssueAction action = request.getGithubAction();
+        if (action == null) {
+            throw new BadRequestException("githubAction is required");
+        }
+        if (action == GitHubIssueAction.LINK_EXISTING && request.getGithubIssueNumber() == null) {
+            throw new BadRequestException("githubIssueNumber is required for LINK_EXISTING");
+        }
+        if (action != GitHubIssueAction.LINK_EXISTING && request.getGithubIssueNumber() != null) {
+            throw new BadRequestException("githubIssueNumber is only allowed for LINK_EXISTING");
+        }
+        Issue issue = createIssue(projectId, request.getTitle(), request.getDescription(), request.getPriority(),
+                request.getDueDate(), request.getEstimatedHours(), userId, true);
+        return switch (action) {
+            case LOCAL -> mapper.toResponse(issue);
+            case LINK_EXISTING -> githubIssueLinkService.link(issue.getId(), request.getGithubIssueNumber(), userId);
+            case CREATE_NEW -> githubIssueLinkService.createAndLink(issue.getId(), userId);
+        };
+    }
+
+    private Issue createIssue(UUID projectId, String title, String description, IssuePriority priority,
+                              java.time.LocalDate dueDate, Double estimatedHours, UUID userId,
+                              boolean allowProjectAdmin) {
         Project project = projectRepository.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
         Role role = access.requireMember(project, userId);
-        if (role != Role.PROJECT_MANAGER && role != Role.TEAM_LEAD && role != Role.REPORTER) {
-            throw new ForbiddenException("Only the project manager, team lead, or a reporter can create issues");
+        boolean allowed = role == Role.PROJECT_MANAGER || role == Role.TEAM_LEAD || role == Role.REPORTER
+                || (allowProjectAdmin && role == Role.ADMIN);
+        if (!allowed) {
+            String message = allowProjectAdmin
+                    ? "Only the project admin, project manager, team lead, or a reviewer can create issues"
+                    : "Only the project manager, team lead, or a reporter can create issues";
+            throw new ForbiddenException(message);
         }
         project.setIssueCounter(project.getIssueCounter() + 1);
         projectRepository.save(project);
@@ -78,16 +119,15 @@ public class IssueServiceImpl implements IssueService {
         Issue issue = new Issue();
         issue.setProjectId(projectId);
         issue.setIssueNumber(project.getIssueCounter());
-        issue.setTitle(r.getTitle().trim());
-        issue.setDescription(r.getDescription());
-        issue.setPriority(r.getPriority() != null ? r.getPriority() : IssuePriority.MEDIUM);
-        issue.setDueDate(r.getDueDate());
-        issue.setEstimatedHours(r.getEstimatedHours());
+        issue.setTitle(title.trim());
+        issue.setDescription(description);
+        issue.setPriority(priority != null ? priority : IssuePriority.MEDIUM);
+        issue.setDueDate(dueDate);
+        issue.setEstimatedHours(estimatedHours);
         issue.setCreatedBy(userId);
         issueRepository.save(issue);
-
         history.record(issue.getId(), userId, IssueHistoryAction.CREATED);
-        return mapper.toResponse(issue);
+        return issue;
     }
 
     @Override

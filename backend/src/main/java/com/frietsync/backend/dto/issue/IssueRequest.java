@@ -2,6 +2,7 @@ package com.frietsync.backend.dto.issue;
 
 import com.frietsync.backend.entity.issue.IssuePriority;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -24,4 +25,7 @@ public class IssueRequest {
 
     @PositiveOrZero(message = "Estimated hours cannot be negative")
     private Double estimatedHours;
+
+    @Min(value = 1, message = "GitHub issue number must be positive")
+    private Integer githubIssueNumber;
 }

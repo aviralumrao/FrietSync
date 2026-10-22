@@ -4,6 +4,7 @@ import com.frietsync.backend.entity.issue.Issue;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -44,4 +45,9 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
             + "(select h.issueId from IssueHistory h where h.actorId = :userId "
             + "and h.action = com.frietsync.backend.entity.issue.IssueHistoryAction.RESOLVED)")
     List<Issue> findResolvedBy(@Param("userId") UUID userId);
+
+    @Modifying
+    @Query("update Issue i set i.githubIssueNumber = null, i.githubIssueTitle = null, "
+            + "i.githubIssueUrl = null, i.githubIssueRepository = null where i.projectId = :projectId")
+    int clearGitHubLinksByProjectId(@Param("projectId") UUID projectId);
 }

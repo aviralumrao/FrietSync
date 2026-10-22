@@ -1,6 +1,7 @@
 package com.frietsync.backend.service.impl.issue;
 
 import com.frietsync.backend.dto.issue.IssueResponse;
+import com.frietsync.backend.dto.issue.GitHubIssueResponse;
 import com.frietsync.backend.entity.issue.Issue;
 import com.frietsync.backend.entity.issue.IssueAssignee;
 import com.frietsync.backend.repository.issue.IssueAssigneeRepository;
@@ -53,6 +54,12 @@ public class IssueMapper {
                 .closedAt(i.getClosedAt())
                 .createdAt(i.getCreatedAt())
                 .updatedAt(i.getUpdatedAt())
+                .githubIssue(i.getGithubIssueNumber() == null ? null : GitHubIssueResponse.builder()
+                        .number(i.getGithubIssueNumber())
+                        .title(i.getGithubIssueTitle())
+                        .url(i.getGithubIssueUrl())
+                        .repository(i.getGithubIssueRepository())
+                        .build())
                 .build();
     }
 }

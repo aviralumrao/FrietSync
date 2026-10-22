@@ -29,4 +29,5 @@ public class IssueResponse {
     private Instant closedAt;
     private Instant createdAt;
     private Instant updatedAt;
+    private GitHubIssueResponse githubIssue;
 }
