@@ -4,6 +4,7 @@ import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.repository.poll.PollRepository;
 import com.frietsync.backend.service.chat.ChatService;
+import com.frietsync.backend.service.community.CommunityService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
@@ -33,8 +34,11 @@ public class ChatAuthChannelInterceptor implements ChannelInterceptor {
     private static final String ACTIVITY_SUFFIX = "/activity";
     private static final String APP_PROJECT_PREFIX = "/app/projects/";
     private static final String NOTIFICATION_DESTINATION = "/user/queue/notifications";
+    private static final String COMMUNITY_TOPIC_PREFIX = "/topic/workspaces/";
+    private static final String COMMUNITY_TOPIC_SUFFIX = "/community";
 
     private final ChatService chatService;
+    private final CommunityService communityService;
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final PollRepository pollRepository;
@@ -50,8 +54,11 @@ public class ChatAuthChannelInterceptor implements ChannelInterceptor {
             authenticate(accessor);
         } else if (accessor.getCommand() == StompCommand.SUBSCRIBE) {
             UUID userId = userId(accessor);
-            if (!NOTIFICATION_DESTINATION.equals(accessor.getDestination())) {
-                chatService.assertProjectAccess(subscriptionProjectId(accessor.getDestination()), userId);
+            String destination = accessor.getDestination();
+            if (isCommunityTopic(destination)) {
+                communityService.assertWorkspaceMember(communityWorkspaceId(destination), userId);
+            } else if (!NOTIFICATION_DESTINATION.equals(destination)) {
+                chatService.assertProjectAccess(subscriptionProjectId(destination), userId);
             }
         } else if (accessor.getCommand() == StompCommand.SEND) {
             chatService.assertProjectAccess(
@@ -89,6 +96,26 @@ public class ChatAuthChannelInterceptor implements ChannelInterceptor {
                 null,
                 List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
         ));
+    }
+
+    private boolean isCommunityTopic(String destination) {
+        return destination != null
+                && destination.startsWith(COMMUNITY_TOPIC_PREFIX)
+                && destination.endsWith(COMMUNITY_TOPIC_SUFFIX)
+                && destination.length() > COMMUNITY_TOPIC_PREFIX.length() + COMMUNITY_TOPIC_SUFFIX.length();
+    }
+
+    private UUID communityWorkspaceId(String destination) {
+        String value = destination.substring(COMMUNITY_TOPIC_PREFIX.length(),
+                destination.length() - COMMUNITY_TOPIC_SUFFIX.length());
+        try {
+            if (value.isBlank() || value.contains("/")) {
+                throw new IllegalArgumentException("Invalid workspace identifier");
+            }
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            throw new AccessDeniedException("Invalid workspace identifier", ex);
+        }
     }
 
     private UUID userId(StompHeaderAccessor accessor) {

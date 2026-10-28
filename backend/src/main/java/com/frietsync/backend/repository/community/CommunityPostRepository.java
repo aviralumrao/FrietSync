@@ -13,11 +13,11 @@ import java.util.UUID;
 
 public interface CommunityPostRepository extends JpaRepository<CommunityPost, UUID> {
 
-    Page<CommunityPost> findByWorkspaceId(UUID workspaceId, Pageable pageable);
+    Page<CommunityPost> findByWorkspaceIdAndDeletedFalse(UUID workspaceId, Pageable pageable);
 
-    List<CommunityPost> findByWorkspaceIdAndPinnedAtIsNotNullOrderByPinnedAtDesc(UUID workspaceId);
+    List<CommunityPost> findByWorkspaceIdAndPinnedAtIsNotNullAndDeletedFalseOrderByPinnedAtDesc(UUID workspaceId);
 
-    long countByWorkspaceIdAndPinnedAtIsNotNull(UUID workspaceId);
+    long countByWorkspaceIdAndPinnedAtIsNotNullAndDeletedFalse(UUID workspaceId);
 
     @Modifying
     @Query("delete from CommunityPost p where p.workspaceId = :workspaceId")

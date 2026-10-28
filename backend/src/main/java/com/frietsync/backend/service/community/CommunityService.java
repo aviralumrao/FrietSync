@@ -5,12 +5,15 @@ import com.frietsync.backend.dto.community.CommentResponse;
 import com.frietsync.backend.dto.community.CreatePostRequest;
 import com.frietsync.backend.dto.community.PostPageResponse;
 import com.frietsync.backend.dto.community.PostResponse;
+import com.frietsync.backend.dto.community.ReactionRequest;
 import com.frietsync.backend.dto.community.UpdatePostRequest;
 
 import java.util.List;
 import java.util.UUID;
 
 public interface CommunityService {
+
+    void assertWorkspaceMember(UUID workspaceId, UUID userId);
 
     PostResponse createPost(UUID workspaceId, UUID userId, CreatePostRequest request);
 
@@ -36,4 +39,13 @@ public interface CommunityService {
                                   CommentRequest request);
 
     void deleteComment(UUID workspaceId, UUID userId, UUID postId, UUID commentId);
+
+    PostResponse reactToPost(UUID workspaceId, UUID userId, UUID postId, ReactionRequest request);
+
+    PostResponse removePostReaction(UUID workspaceId, UUID userId, UUID postId);
+
+    CommentResponse reactToComment(UUID workspaceId, UUID userId, UUID postId, UUID commentId,
+                                   ReactionRequest request);
+
+    CommentResponse removeCommentReaction(UUID workspaceId, UUID userId, UUID postId, UUID commentId);
 }

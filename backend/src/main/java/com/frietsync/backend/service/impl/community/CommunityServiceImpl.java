@@ -5,9 +5,13 @@ import com.frietsync.backend.dto.community.CommentResponse;
 import com.frietsync.backend.dto.community.CreatePostRequest;
 import com.frietsync.backend.dto.community.PostPageResponse;
 import com.frietsync.backend.dto.community.PostResponse;
+import com.frietsync.backend.dto.community.ReactionRequest;
 import com.frietsync.backend.dto.community.UpdatePostRequest;
 import com.frietsync.backend.entity.community.CommunityComment;
 import com.frietsync.backend.entity.community.CommunityPost;
+import com.frietsync.backend.entity.community.CommunityReaction;
+import com.frietsync.backend.entity.community.ReactionTargetType;
+import com.frietsync.backend.entity.community.ReactionType;
 import com.frietsync.backend.entity.user.Role;
 import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.entity.workspace.Workspace;
@@ -16,6 +20,7 @@ import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.repository.community.CommunityCommentRepository;
 import com.frietsync.backend.repository.community.CommunityPostRepository;
+import com.frietsync.backend.repository.community.CommunityReactionRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.repository.workspace.WorkspaceRepository;
 import com.frietsync.backend.service.community.CommunityService;
@@ -28,7 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -42,6 +49,13 @@ public class CommunityServiceImpl implements CommunityService {
     private final WorkspaceRepository workspaceRepository;
     private final CommunityPostRepository postRepository;
     private final CommunityCommentRepository commentRepository;
+    private final CommunityReactionRepository reactionRepository;
+
+    @Override
+    @Transactional(readOnly = true)
+    public void assertWorkspaceMember(UUID workspaceId, UUID userId) {
+        requireWorkspaceMember(userId, workspaceId);
+    }
 
     @Override
     @Transactional
@@ -55,7 +69,7 @@ public class CommunityServiceImpl implements CommunityService {
         post.setTitle(request.getTitle().trim());
         post.setContent(request.getContent().trim());
 
-        return toPostResponse(postRepository.save(post));
+        return toPostResponse(postRepository.save(post), userId);
     }
 
     @Override
@@ -64,7 +78,7 @@ public class CommunityServiceImpl implements CommunityService {
         requireWorkspaceMember(userId, workspaceId);
         checkPaging(page, size);
 
-        Page<CommunityPost> result = postRepository.findByWorkspaceId(
+        Page<CommunityPost> result = postRepository.findByWorkspaceIdAndDeletedFalse(
                 workspaceId,
                 PageRequest.of(page, size, Sort.by(
                         Sort.Order.desc("createdAt"),
@@ -72,7 +86,7 @@ public class CommunityServiceImpl implements CommunityService {
 
         List<PostResponse> items = new ArrayList<>();
         for (CommunityPost post : result.getContent()) {
-            items.add(toPostResponse(post));
+            items.add(toPostResponse(post, userId));
         }
         return new PostPageResponse(items, page, size, result.getTotalElements(), result.getTotalPages());
     }
@@ -84,8 +98,8 @@ public class CommunityServiceImpl implements CommunityService {
 
         List<PostResponse> items = new ArrayList<>();
         for (CommunityPost post : postRepository
-                .findByWorkspaceIdAndPinnedAtIsNotNullOrderByPinnedAtDesc(workspaceId)) {
-            items.add(toPostResponse(post));
+                .findByWorkspaceIdAndPinnedAtIsNotNullAndDeletedFalseOrderByPinnedAtDesc(workspaceId)) {
+            items.add(toPostResponse(post, userId));
         }
         return items;
     }
@@ -94,22 +108,22 @@ public class CommunityServiceImpl implements CommunityService {
     @Transactional(readOnly = true)
     public PostResponse getPost(UUID workspaceId, UUID userId, UUID postId) {
         requireWorkspaceMember(userId, workspaceId);
-        return toPostResponse(findPost(workspaceId, postId));
+        return toPostResponse(findPost(workspaceId, postId), userId);
     }
 
     @Override
     @Transactional
     public PostResponse updatePost(UUID workspaceId, UUID userId, UUID postId, UpdatePostRequest request) {
-        requireWorkspaceMember(userId, workspaceId);
+        User user = requireWorkspaceMember(userId, workspaceId);
         CommunityPost post = findPost(workspaceId, postId);
-        if (!userId.equals(post.getAuthorId())) {
-            throw new ForbiddenException("You can only edit your own posts");
+        if (!userId.equals(post.getAuthorId()) && user.getRole() != Role.ADMIN) {
+            throw new ForbiddenException("Only the author or an admin can edit this post");
         }
 
         post.setTitle(request.getTitle().trim());
         post.setContent(request.getContent().trim());
         post.setEditedAt(Instant.now());
-        return toPostResponse(postRepository.save(post));
+        return toPostResponse(postRepository.save(post), userId);
     }
 
     @Override
@@ -118,11 +132,15 @@ public class CommunityServiceImpl implements CommunityService {
         User user = requireWorkspaceMember(userId, workspaceId);
         CommunityPost post = findPost(workspaceId, postId);
         if (!userId.equals(post.getAuthorId()) && user.getRole() != Role.ADMIN) {
-            throw new ForbiddenException("You can't delete this post");
+            throw new ForbiddenException("Only the author or an admin can delete this post");
         }
 
-        commentRepository.deleteByPostId(postId);
-        postRepository.delete(post);
+        post.setDeleted(true);
+        post.setDeletedAt(Instant.now());
+        post.setDeletedBy(userId);
+        post.setPinnedAt(null);
+        post.setPinnedBy(null);
+        postRepository.save(post);
     }
 
     @Override
@@ -133,12 +151,14 @@ public class CommunityServiceImpl implements CommunityService {
             throw new ForbiddenException("Only admins can pin posts");
         }
 
+        // lock the workspace row so two admins cannot pin past the limit at the same time
         workspaceRepository.findByIdForUpdate(workspaceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workspace not found"));
 
         CommunityPost post = findPost(workspaceId, postId);
         if (post.getPinnedAt() == null) {
-            if (postRepository.countByWorkspaceIdAndPinnedAtIsNotNull(workspaceId) >= MAX_PINNED_POSTS) {
+            if (postRepository.countByWorkspaceIdAndPinnedAtIsNotNullAndDeletedFalse(workspaceId)
+                    >= MAX_PINNED_POSTS) {
                 throw new BadRequestException("A workspace can have up to " + MAX_PINNED_POSTS
                         + " pinned posts. Unpin one first");
             }
@@ -146,7 +166,7 @@ public class CommunityServiceImpl implements CommunityService {
             post.setPinnedBy(userId);
             post = postRepository.save(post);
         }
-        return toPostResponse(post);
+        return toPostResponse(post, userId);
     }
 
     @Override
@@ -163,7 +183,7 @@ public class CommunityServiceImpl implements CommunityService {
             post.setPinnedBy(null);
             post = postRepository.save(post);
         }
-        return toPostResponse(post);
+        return toPostResponse(post, userId);
     }
 
     @Override
@@ -179,7 +199,7 @@ public class CommunityServiceImpl implements CommunityService {
         comment.setAuthorName(user.getName());
         comment.setContent(request.getContent().trim());
 
-        return toCommentResponse(commentRepository.save(comment));
+        return toCommentResponse(commentRepository.save(comment), userId);
     }
 
     @Override
@@ -196,7 +216,7 @@ public class CommunityServiceImpl implements CommunityService {
                         Sort.Order.asc("createdAt"),
                         Sort.Order.asc("id"))));
         for (CommunityComment comment : comments) {
-            items.add(toCommentResponse(comment));
+            items.add(toCommentResponse(comment, userId));
         }
         return items;
     }
@@ -205,16 +225,16 @@ public class CommunityServiceImpl implements CommunityService {
     @Transactional
     public CommentResponse updateComment(UUID workspaceId, UUID userId, UUID postId, UUID commentId,
                                          CommentRequest request) {
-        requireWorkspaceMember(userId, workspaceId);
+        User user = requireWorkspaceMember(userId, workspaceId);
         findPost(workspaceId, postId);
         CommunityComment comment = findComment(postId, commentId);
-        if (!userId.equals(comment.getAuthorId())) {
-            throw new ForbiddenException("You can only edit your own comments");
+        if (!userId.equals(comment.getAuthorId()) && user.getRole() != Role.ADMIN) {
+            throw new ForbiddenException("Only the author or an admin can edit this comment");
         }
 
         comment.setContent(request.getContent().trim());
         comment.setEditedAt(Instant.now());
-        return toCommentResponse(commentRepository.save(comment));
+        return toCommentResponse(commentRepository.save(comment), userId);
     }
 
     @Override
@@ -224,10 +244,79 @@ public class CommunityServiceImpl implements CommunityService {
         findPost(workspaceId, postId);
         CommunityComment comment = findComment(postId, commentId);
         if (!userId.equals(comment.getAuthorId()) && user.getRole() != Role.ADMIN) {
-            throw new ForbiddenException("You can't delete this comment");
+            throw new ForbiddenException("Only the author or an admin can delete this comment");
         }
 
+        reactionRepository.deleteByTarget(ReactionTargetType.COMMENT, commentId);
         commentRepository.delete(comment);
+    }
+
+    @Override
+    @Transactional
+    public PostResponse reactToPost(UUID workspaceId, UUID userId, UUID postId, ReactionRequest request) {
+        requireWorkspaceMember(userId, workspaceId);
+        CommunityPost post = findPost(workspaceId, postId);
+
+        saveReaction(workspaceId, userId, ReactionTargetType.POST, postId, request.getType());
+        return toPostResponse(post, userId);
+    }
+
+    @Override
+    @Transactional
+    public PostResponse removePostReaction(UUID workspaceId, UUID userId, UUID postId) {
+        requireWorkspaceMember(userId, workspaceId);
+        CommunityPost post = findPost(workspaceId, postId);
+
+        removeReaction(ReactionTargetType.POST, postId, userId);
+        return toPostResponse(post, userId);
+    }
+
+    @Override
+    @Transactional
+    public CommentResponse reactToComment(UUID workspaceId, UUID userId, UUID postId, UUID commentId,
+                                          ReactionRequest request) {
+        requireWorkspaceMember(userId, workspaceId);
+        findPost(workspaceId, postId);
+        CommunityComment comment = findComment(postId, commentId);
+
+        saveReaction(workspaceId, userId, ReactionTargetType.COMMENT, commentId, request.getType());
+        return toCommentResponse(comment, userId);
+    }
+
+    @Override
+    @Transactional
+    public CommentResponse removeCommentReaction(UUID workspaceId, UUID userId, UUID postId, UUID commentId) {
+        requireWorkspaceMember(userId, workspaceId);
+        findPost(workspaceId, postId);
+        CommunityComment comment = findComment(postId, commentId);
+
+        removeReaction(ReactionTargetType.COMMENT, commentId, userId);
+        return toCommentResponse(comment, userId);
+    }
+
+    private void saveReaction(UUID workspaceId, UUID userId, ReactionTargetType targetType,
+                              UUID targetId, ReactionType type) {
+        CommunityReaction reaction = reactionRepository
+                .findByTargetTypeAndTargetIdAndUserId(targetType, targetId, userId)
+                .orElse(null);
+        if (reaction == null) {
+            reaction = new CommunityReaction();
+            reaction.setWorkspaceId(workspaceId);
+            reaction.setTargetType(targetType);
+            reaction.setTargetId(targetId);
+            reaction.setUserId(userId);
+        }
+        reaction.setType(type);
+        reactionRepository.save(reaction);
+    }
+
+    private void removeReaction(ReactionTargetType targetType, UUID targetId, UUID userId) {
+        CommunityReaction reaction = reactionRepository
+                .findByTargetTypeAndTargetIdAndUserId(targetType, targetId, userId)
+                .orElse(null);
+        if (reaction != null) {
+            reactionRepository.delete(reaction);
+        }
     }
 
     private User requireWorkspaceMember(UUID userId, UUID workspaceId) {
@@ -247,7 +336,7 @@ public class CommunityServiceImpl implements CommunityService {
     private CommunityPost findPost(UUID workspaceId, UUID postId) {
         CommunityPost post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-        if (!workspaceId.equals(post.getWorkspaceId())) {
+        if (!workspaceId.equals(post.getWorkspaceId()) || post.isDeleted()) {
             throw new ResourceNotFoundException("Post not found");
         }
         return post;
@@ -271,7 +360,32 @@ public class CommunityServiceImpl implements CommunityService {
         }
     }
 
-    private PostResponse toPostResponse(CommunityPost post) {
+    private Map<String, Long> countReactions(List<CommunityReaction> reactions) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (CommunityReaction reaction : reactions) {
+            String key = reaction.getType().name();
+            Long current = counts.get(key);
+            if (current == null) {
+                counts.put(key, 1L);
+            } else {
+                counts.put(key, current + 1L);
+            }
+        }
+        return counts;
+    }
+
+    private String findMyReaction(List<CommunityReaction> reactions, UUID viewerId) {
+        for (CommunityReaction reaction : reactions) {
+            if (viewerId.equals(reaction.getUserId())) {
+                return reaction.getType().name();
+            }
+        }
+        return null;
+    }
+
+    private PostResponse toPostResponse(CommunityPost post, UUID viewerId) {
+        List<CommunityReaction> reactions = reactionRepository
+                .findByTargetTypeAndTargetId(ReactionTargetType.POST, post.getId());
         return new PostResponse(
                 post.getId(),
                 post.getWorkspaceId(),
@@ -283,12 +397,16 @@ public class CommunityServiceImpl implements CommunityService {
                 post.getPinnedAt(),
                 post.getEditedAt(),
                 commentRepository.countByPostId(post.getId()),
+                countReactions(reactions),
+                findMyReaction(reactions, viewerId),
                 post.getCreatedAt(),
                 post.getUpdatedAt()
         );
     }
 
-    private CommentResponse toCommentResponse(CommunityComment comment) {
+    private CommentResponse toCommentResponse(CommunityComment comment, UUID viewerId) {
+        List<CommunityReaction> reactions = reactionRepository
+                .findByTargetTypeAndTargetId(ReactionTargetType.COMMENT, comment.getId());
         return new CommentResponse(
                 comment.getId(),
                 comment.getPostId(),
@@ -296,6 +414,8 @@ public class CommunityServiceImpl implements CommunityService {
                 comment.getAuthorName(),
                 comment.getContent(),
                 comment.getEditedAt(),
+                countReactions(reactions),
+                findMyReaction(reactions, viewerId),
                 comment.getCreatedAt()
         );
     }

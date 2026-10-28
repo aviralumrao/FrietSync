@@ -1,6 +1,7 @@
 package com.frietsync.backend.dto.community;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 public record PostResponse(
@@ -14,6 +15,8 @@ public record PostResponse(
         Instant pinnedAt,
         Instant editedAt,
         long commentCount,
+        Map<String, Long> reactions,
+        String myReaction,
         Instant createdAt,
         Instant updatedAt
 ) {

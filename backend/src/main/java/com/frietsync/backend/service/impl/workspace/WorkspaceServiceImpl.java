@@ -11,6 +11,9 @@ import com.frietsync.backend.entity.workspace.Workspace;
 import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
+import com.frietsync.backend.repository.community.CommunityCommentRepository;
+import com.frietsync.backend.repository.community.CommunityPostRepository;
+import com.frietsync.backend.repository.community.CommunityReactionRepository;
 import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.repository.workspace.WorkspaceRepository;
 import com.frietsync.backend.repository.project.ProjectRepository;
@@ -34,6 +37,9 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     private final WorkspaceRepository workspaceRepository;
     private final ProjectRepository projectRepository;
     private final InviteRepository inviteRepository;
+    private final CommunityPostRepository communityPostRepository;
+    private final CommunityCommentRepository communityCommentRepository;
+    private final CommunityReactionRepository communityReactionRepository;
     private final ProfilePictureUrlService profilePictureUrlService;
 
     @Override
@@ -189,6 +195,9 @@ public class WorkspaceServiceImpl implements WorkspaceService {
             userRepository.saveAll(members);
             projectRepository.clearWorkspaceId(workspace.getId());
             inviteRepository.deleteByWorkspaceId(workspace.getId());
+            communityReactionRepository.deleteByWorkspaceId(workspace.getId());
+            communityCommentRepository.deleteByWorkspaceId(workspace.getId());
+            communityPostRepository.deleteByWorkspaceId(workspace.getId());
             workspaceRepository.delete(workspace);
         }
     }
