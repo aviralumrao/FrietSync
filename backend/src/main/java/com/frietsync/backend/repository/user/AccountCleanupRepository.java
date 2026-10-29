@@ -63,10 +63,6 @@ public interface AccountCleanupRepository extends Repository<User, UUID> {
     void deleteInvitesForEmail(@Param("email") String email);
 
     @Modifying
-    @Query("delete from Otp o where lower(o.email) = lower(:email)")
-    void deleteOtpsForEmail(@Param("email") String email);
-
-    @Modifying
     @Query("delete from GoogleOAuthState s where s.user.id = :userId")
     void deleteGoogleOAuthStates(@Param("userId") UUID userId);
 

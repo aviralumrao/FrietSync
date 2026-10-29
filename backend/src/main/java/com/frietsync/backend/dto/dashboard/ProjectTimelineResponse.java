@@ -1,6 +1,5 @@
 package com.frietsync.backend.dto.dashboard;
 
-import com.frietsync.backend.entity.issue.IssueLinkType;
 import com.frietsync.backend.entity.issue.IssuePriority;
 import com.frietsync.backend.entity.issue.IssueStatus;
 import lombok.AllArgsConstructor;
@@ -51,7 +50,6 @@ public class ProjectTimelineResponse {
     public static class Dependency {
         private UUID sourceIssueId;
         private UUID targetIssueId;
-        private IssueLinkType type;
     }
 
     @Data

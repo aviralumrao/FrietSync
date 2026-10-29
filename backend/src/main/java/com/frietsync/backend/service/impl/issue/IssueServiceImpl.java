@@ -163,17 +163,9 @@ public class IssueServiceImpl implements IssueService {
 
     @Override
     @Transactional(readOnly = true)
-    public IssuePageResponse<IssueResponse> listAssignedToMe(UUID userId, int page, int size) {
+    public List<IssueResponse> listAssignedToMe(UUID userId) {
         UUID workspaceId = access.requireActiveWorkspace(userId);
-        Page<Issue> result = issueRepository.findAssignedToUserInWorkspace(
-                userId, workspaceId, pageRequest(page, size));
-        return IssuePageResponse.<IssueResponse>builder()
-                .items(mapper.toResponses(result.getContent()))
-                .page(result.getNumber())
-                .size(result.getSize())
-                .totalElements(result.getTotalElements())
-                .totalPages(result.getTotalPages())
-                .build();
+        return mapper.toResponses(issueRepository.findAssignedToUserInWorkspace(userId, workspaceId));
     }
 
     @Override

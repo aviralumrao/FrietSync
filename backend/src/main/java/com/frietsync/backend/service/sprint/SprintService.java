@@ -12,6 +12,8 @@ import java.util.UUID;
 public interface SprintService {
     SprintResponse createSprint(UUID projectId, CreateSprintRequest request, UUID currentUserId);
     List<SprintResponse> listSprints(UUID projectId, UUID currentUserId);
+    List<SprintResponse> listAssignedToMe(UUID currentUserId);
+    List<SprintResponse> listSprintsForIssue(UUID issueId, UUID currentUserId);
     SprintResponse getSprint(UUID sprintId, UUID currentUserId);
     SprintResponse updateSprint(UUID sprintId, UpdateSprintRequest request, UUID currentUserId);
     SprintResponse changeStatus(UUID sprintId, ChangeSprintStatusRequest request, UUID currentUserId);

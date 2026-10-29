@@ -21,7 +21,7 @@ public interface IssueService {
 
     IssuePageResponse<IssueResponse> listForProject(UUID projectId, UUID userId, int page, int size);
 
-    IssuePageResponse<IssueResponse> listAssignedToMe(UUID userId, int page, int size);
+    List<IssueResponse> listAssignedToMe(UUID userId);
 
     IssueResponse get(UUID issueId, UUID userId);
 

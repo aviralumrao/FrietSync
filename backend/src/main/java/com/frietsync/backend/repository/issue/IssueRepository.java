@@ -59,6 +59,12 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
             + "(select a.issueId from IssueAssignee a where a.userId = :userId)")
     List<Issue> findAssignedTo(@Param("userId") UUID userId);
 
+    @Query("select i from Issue i where i.deletedAt is null and i.projectId in "
+            + "(select p.id from Project p where p.workspaceId = :workspaceId) and i.id in "
+            + "(select a.issueId from IssueAssignee a where a.userId = :userId)")
+    List<Issue> findAssignedToUserInWorkspace(@Param("userId") UUID userId,
+                                              @Param("workspaceId") UUID workspaceId);
+
     @Query("select i from Issue i where i.deletedAt is null and i.id in "
             + "(select h.issueId from IssueHistory h where h.actorId = :userId "
             + "and h.action = com.frietsync.backend.entity.issue.IssueHistoryAction.RESOLVED)")

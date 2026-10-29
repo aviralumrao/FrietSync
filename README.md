@@ -140,12 +140,10 @@ Each member connects their own GitHub account to associate a GitHub login with t
 | GET | `/api/v1/projects/{projectId}/issue-requests` | Authenticated | List assignment requests |
 | POST | `/api/v1/issues/{issueId}/issue-requests` | Authenticated | Decide on a request |
 | DELETE | `/api/v1/projects/{projectId}/issue-requests?requestId={requestId}` | Authenticated | Reject a request |
-| POST | `/api/v1/issues/{issueId}/links` | Authenticated | Create a dependency / link |
+| POST | `/api/v1/issues/{issueId}/links` | Authenticated | Link two issues |
 | GET | `/api/v1/issues/{issueId}/links` | Authenticated | List issue links |
 | DELETE | `/api/v1/issue-links/{linkId}` | Authenticated | Remove an issue link |
-| GET | `/api/v1/issues/{issueId}/impact` | Authenticated | Get issue impact |
-| GET | `/api/v1/issues/{issueId}/dependencies` | Authenticated | Get issue dependencies |
-| GET | `/api/v1/projects/{projectId}/dependency-graph` | Authenticated | Get dependency graph |
+| GET | `/api/v1/projects/{projectId}/dependency-graph` | Authenticated | Get project issues and their links |
 | POST | `/api/v1/issues/{issueId}/attachments` | Authenticated | Upload attached files |
 | GET | `/api/v1/issues/{issueId}/attachments` | Authenticated | List issue attachments |
 | DELETE | `/api/v1/attachments/{attachmentId}` | Authenticated | Delete an attachment |

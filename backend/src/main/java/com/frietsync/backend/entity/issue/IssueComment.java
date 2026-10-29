@@ -20,6 +20,6 @@ public class IssueComment extends BaseEntity {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(nullable = false, length = 2000)
+    @Column(nullable = false, length = 200)
     private String content;
 }

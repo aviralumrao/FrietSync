@@ -219,7 +219,7 @@ public class ProjectDashboardService {
     }
 
     private static ProjectTimelineResponse.Dependency toDependency(IssueLink link) {
-        return new ProjectTimelineResponse.Dependency(link.getSourceIssueId(), link.getTargetIssueId(), link.getType());
+        return new ProjectTimelineResponse.Dependency(link.getSourceIssueId(), link.getTargetIssueId());
     }
 
     private List<IssueStatus> allowedTransitions(IssueStatus status) {

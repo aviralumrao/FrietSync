@@ -1,7 +1,6 @@
 package com.frietsync.backend.repository.issue;
 
 import com.frietsync.backend.entity.issue.IssueLink;
-import com.frietsync.backend.entity.issue.IssueLinkType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -13,7 +12,8 @@ public interface IssueLinkRepository extends JpaRepository<IssueLink, UUID> {
 
     List<IssueLink> findByProjectId(UUID projectId);
 
-    boolean existsBySourceIssueIdAndTargetIssueIdAndType(UUID sourceIssueId, UUID targetIssueId, IssueLinkType type);
+    boolean existsBySourceIssueIdAndTargetIssueIdOrSourceIssueIdAndTargetIssueId(
+            UUID sourceIssueId, UUID targetIssueId, UUID reverseSourceIssueId, UUID reverseTargetIssueId);
 
     void deleteBySourceIssueIdOrTargetIssueId(UUID sourceIssueId, UUID targetIssueId);
 }

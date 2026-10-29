@@ -1,38 +1,33 @@
 package com.frietsync.backend.service.impl.issue;
 
 import com.frietsync.backend.dto.issue.DependencyGraphResponse;
-import com.frietsync.backend.dto.issue.IssueImpactResponse;
 import com.frietsync.backend.dto.issue.IssueLinkRequest;
 import com.frietsync.backend.dto.issue.IssueLinkResponse;
 import com.frietsync.backend.dto.issue.IssueSummaryResponse;
+import com.frietsync.backend.dto.issue.LinkedIssueResponse;
 import com.frietsync.backend.entity.issue.Issue;
 import com.frietsync.backend.entity.issue.IssueHistoryAction;
 import com.frietsync.backend.entity.issue.IssueLink;
-import com.frietsync.backend.entity.issue.IssueLinkType;
 import com.frietsync.backend.entity.project.Project;
 import com.frietsync.backend.entity.user.Role;
+import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.repository.issue.IssueLinkRepository;
 import com.frietsync.backend.repository.issue.IssueRepository;
 import com.frietsync.backend.repository.user.UserRepository;
-import com.frietsync.backend.entity.user.User;
 import com.frietsync.backend.service.impl.project.ProjectAccess;
 import com.frietsync.backend.service.issue.IssueLinkService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Deque;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -46,57 +41,67 @@ public class IssueLinkServiceImpl implements IssueLinkService {
     private final IssueHistoryRecorder history;
 
     @Override
-    public IssueLinkResponse create(UUID issueId, IssueLinkRequest r, UUID userId) {
-        if (issueId.equals(r.getTargetIssueId())) {
+    public IssueLinkResponse create(UUID issueId, IssueLinkRequest request, UUID userId) {
+        if (issueId.equals(request.getTargetIssueId())) {
             throw new BadRequestException("An issue cannot be linked to itself");
         }
-
         Issue source = access.issue(issueId);
         Project project = access.project(source.getProjectId());
         access.require(project, userId, Role.PROJECT_MANAGER, Role.TEAM_LEAD, Role.CONTRIBUTOR);
-
-        Issue target = access.issue(r.getTargetIssueId());
+        Issue target = access.issue(request.getTargetIssueId());
         if (!target.getProjectId().equals(source.getProjectId())) {
             throw new BadRequestException("Both issues must belong to the same project");
         }
-
-        IssueLinkType type = r.getType();
-        boolean exists = linkRepository.existsBySourceIssueIdAndTargetIssueIdAndType(issueId, target.getId(), type);
-        if (type == IssueLinkType.RELATES_TO
-                && linkRepository.existsBySourceIssueIdAndTargetIssueIdAndType(target.getId(), issueId, type)) {
-            exists = true;
-        }
-        if (exists) {
-            throw new BadRequestException("These issues are already linked this way");
-        }
-
-        if (type == IssueLinkType.BLOCKS) {
-            Map<UUID, List<UUID>> graph = blockGraph(linkRepository.findByProjectId(source.getProjectId()));
-            if (downstream(graph, target.getId()).contains(issueId)) {
-                throw new BadRequestException("This link would create a circular dependency");
-            }
+        if (linkRepository.existsBySourceIssueIdAndTargetIssueIdOrSourceIssueIdAndTargetIssueId(
+                issueId, target.getId(), target.getId(), issueId)) {
+            throw new BadRequestException("These issues are already linked");
         }
 
         IssueLink link = new IssueLink();
         link.setProjectId(source.getProjectId());
         link.setSourceIssueId(issueId);
         link.setTargetIssueId(target.getId());
-        link.setType(type);
         link.setCreatedBy(userId);
         linkRepository.save(link);
-
         history.record(issueId, userId, IssueHistoryAction.LINK_ADDED,
-                "link", null, type + " #" + target.getIssueNumber());
+                "link", null, "#" + target.getIssueNumber());
         return toLinkResponses(List.of(link)).get(0);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<IssueLinkResponse> list(UUID issueId, UUID userId) {
+    public List<LinkedIssueResponse> list(UUID issueId, UUID userId) {
         Issue issue = access.issue(issueId);
         access.requireMember(access.project(issue.getProjectId()), userId);
-        return toLinkResponses(linkRepository
-                .findBySourceIssueIdOrTargetIssueIdOrderByCreatedAtDesc(issueId, issueId));
+        List<IssueLink> links = linkRepository
+                .findBySourceIssueIdOrTargetIssueIdOrderByCreatedAtDesc(issueId, issueId);
+
+        List<UUID> otherIssueIds = links.stream()
+                .map(link -> link.getSourceIssueId().equals(issueId)
+                        ? link.getTargetIssueId()
+                        : link.getSourceIssueId())
+                .distinct()
+                .toList();
+
+        Map<UUID, Issue> issueMap = issueRepository.findAllById(otherIssueIds).stream()
+                .collect(Collectors.toMap(Issue::getId, i -> i));
+
+        return links.stream()
+                .map(link -> {
+                    UUID otherId = link.getSourceIssueId().equals(issueId)
+                            ? link.getTargetIssueId()
+                            : link.getSourceIssueId();
+                    Issue other = issueMap.get(otherId);
+                    if (other == null) return null;
+                    return LinkedIssueResponse.builder()
+                            .linkId(link.getId())
+                            .issueId(other.getId())
+                            .issueNumber(other.getIssueNumber())
+                            .issueTitle(other.getTitle())
+                            .build();
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     @Override
@@ -106,74 +111,10 @@ public class IssueLinkServiceImpl implements IssueLinkService {
         Issue source = access.issue(link.getSourceIssueId());
         Project project = access.project(source.getProjectId());
         access.require(project, userId, Role.PROJECT_MANAGER, Role.TEAM_LEAD, Role.CONTRIBUTOR);
-
-        String oldValue = link.getType() + "";
         Issue target = issueRepository.findById(link.getTargetIssueId()).orElse(null);
-        if (target != null) {
-            oldValue = oldValue + " #" + target.getIssueNumber();
-        }
-
+        String oldValue = target == null ? "linked issue" : "#" + target.getIssueNumber();
         linkRepository.delete(link);
-        history.record(source.getId(), userId, IssueHistoryAction.LINK_REMOVED,
-                "link", oldValue, null);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public IssueImpactResponse impact(UUID issueId, UUID userId) {
-        Issue issue = access.issue(issueId);
-        access.requireMember(access.project(issue.getProjectId()), userId);
-
-        List<IssueLink> links = linkRepository.findByProjectId(issue.getProjectId());
-        Map<UUID, List<UUID>> graph = blockGraph(links);
-
-        Set<UUID> allDependents = downstream(graph, issueId);
-        List<UUID> direct = graph.get(issueId);
-        if (direct == null) {
-            direct = new ArrayList<>();
-        }
-        Set<UUID> indirect = new LinkedHashSet<>(allDependents);
-        indirect.removeAll(direct);
-
-        List<UUID> blockedBy = new ArrayList<>();
-        List<UUID> related = new ArrayList<>();
-        for (IssueLink link : links) {
-            if (link.getType() == IssueLinkType.BLOCKS) {
-                if (link.getTargetIssueId().equals(issueId)) {
-                    blockedBy.add(link.getSourceIssueId());
-                }
-            } else {
-                if (link.getSourceIssueId().equals(issueId)) {
-                    related.add(link.getTargetIssueId());
-                } else if (link.getTargetIssueId().equals(issueId)) {
-                    related.add(link.getSourceIssueId());
-                }
-            }
-        }
-
-        return IssueImpactResponse.builder()
-                .issue(toSummary(issue))
-                .blockedBy(summaries(blockedBy))
-                .directDependents(summaries(direct))
-                .indirectDependents(summaries(indirect))
-                .related(summaries(related))
-                .totalAffected(allDependents.size())
-                .build();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<IssueSummaryResponse> dependencies(UUID issueId, UUID userId) {
-        Issue issue = access.issue(issueId);
-        access.requireMember(access.project(issue.getProjectId()), userId);
-
-        List<UUID> dependentIds = new ArrayList<>();
-        for (IssueLink link : linkRepository.findByProjectId(issue.getProjectId())) {
-            if (link.getType() == IssueLinkType.BLOCKS && link.getSourceIssueId().equals(issueId)) {
-                dependentIds.add(link.getTargetIssueId());
-            }
-        }
-        return summaries(dependentIds);
+        history.record(source.getId(), userId, IssueHistoryAction.LINK_REMOVED, "link", oldValue, null);
     }
 
     @Override
@@ -181,116 +122,48 @@ public class IssueLinkServiceImpl implements IssueLinkService {
     public DependencyGraphResponse dependencyGraph(UUID projectId, UUID userId) {
         Project project = access.project(projectId);
         access.requireMember(project, userId);
-
         List<IssueSummaryResponse> nodes = new ArrayList<>();
         for (Issue issue : issueRepository.findByProjectIdOrderByCreatedAtDesc(projectId)) {
-            if (issue.getDeletedAt() == null) {
-                nodes.add(toSummary(issue));
-            }
+            if (issue.getDeletedAt() == null) nodes.add(toSummary(issue));
         }
-        List<IssueLinkResponse> edges = toLinkResponses(linkRepository.findByProjectId(projectId));
-
         return DependencyGraphResponse.builder()
                 .nodes(nodes)
-                .edges(edges)
+                .edges(toLinkResponses(linkRepository.findByProjectId(projectId)))
                 .build();
     }
 
-    private Map<UUID, List<UUID>> blockGraph(List<IssueLink> links) {
-        Map<UUID, List<UUID>> graph = new HashMap<>();
-        for (IssueLink link : links) {
-            if (link.getType() != IssueLinkType.BLOCKS) {
-                continue;
-            }
-            List<UUID> blocked = graph.get(link.getSourceIssueId());
-            if (blocked == null) {
-                blocked = new ArrayList<>();
-                graph.put(link.getSourceIssueId(), blocked);
-            }
-            blocked.add(link.getTargetIssueId());
-        }
-        return graph;
-    }
-
-    private Set<UUID> downstream(Map<UUID, List<UUID>> graph, UUID start) {
-        Set<UUID> seen = new LinkedHashSet<>();
-        Deque<UUID> queue = new ArrayDeque<>();
-        queue.add(start);
-        while (!queue.isEmpty()) {
-            UUID current = queue.poll();
-            List<UUID> next = graph.get(current);
-            if (next == null) {
-                continue;
-            }
-            for (UUID id : next) {
-                if (seen.add(id)) {
-                    queue.add(id);
-                }
-            }
-        }
-        return seen;
-    }
-
-    private List<IssueSummaryResponse> summaries(Collection<UUID> ids) {
-        List<IssueSummaryResponse> result = new ArrayList<>();
-        if (ids.isEmpty()) {
-            return result;
-        }
-        Map<UUID, Issue> issues = new HashMap<>();
-        for (Issue issue : issueRepository.findAllById(ids)) {
-            issues.put(issue.getId(), issue);
-        }
-        for (UUID id : ids) {
-            Issue issue = issues.get(id);
-            if (issue != null) {
-                result.add(toSummary(issue));
-            }
-        }
-        return result;
-    }
-
     private List<IssueLinkResponse> toLinkResponses(List<IssueLink> links) {
-        Set<UUID> issueIds = new LinkedHashSet<>();
+        var issueIds = new LinkedHashSet<UUID>();
         for (IssueLink link : links) {
             issueIds.add(link.getSourceIssueId());
             issueIds.add(link.getTargetIssueId());
         }
-        Map<UUID, Issue> issues = new HashMap<>();
-        for (Issue issue : issueRepository.findAllById(issueIds)) {
-            issues.put(issue.getId(), issue);
-        }
-
+        Map<UUID, Issue> issues = issueRepository.findAllById(issueIds).stream()
+                .collect(Collectors.toMap(Issue::getId, issue -> issue));
+        Map<UUID, String> names = userRepository.findAllById(links.stream()
+                        .map(IssueLink::getCreatedBy).filter(java.util.Objects::nonNull).distinct().toList())
+                .stream().collect(Collectors.toMap(User::getId, User::getName));
         List<IssueLinkResponse> result = new ArrayList<>();
         for (IssueLink link : links) {
             Issue source = issues.get(link.getSourceIssueId());
             Issue target = issues.get(link.getTargetIssueId());
             result.add(IssueLinkResponse.builder()
-                    .id(link.getId())
-                    .projectId(link.getProjectId())
+                    .id(link.getId()).projectId(link.getProjectId())
                     .sourceIssueId(link.getSourceIssueId())
                     .sourceIssueNumber(source == null ? 0 : source.getIssueNumber())
                     .sourceTitle(source == null ? null : source.getTitle())
                     .targetIssueId(link.getTargetIssueId())
                     .targetIssueNumber(target == null ? 0 : target.getIssueNumber())
                     .targetTitle(target == null ? null : target.getTitle())
-                    .type(link.getType())
-                    .createdBy(link.getCreatedBy())
-                    .createdByName(userRepository.findById(link.getCreatedBy()).map(User::getName).orElse(null))
-                    .createdAt(link.getCreatedAt())
-                    .build());
+                    .createdBy(link.getCreatedBy()).createdByName(names.get(link.getCreatedBy()))
+                    .createdAt(link.getCreatedAt()).build());
         }
         return result;
     }
 
-    private IssueSummaryResponse toSummary(Issue i) {
-        return IssueSummaryResponse.builder()
-                .id(i.getId())
-                .issueNumber(i.getIssueNumber())
-                .title(i.getTitle())
-                .status(i.getStatus())
-                .priority(i.getPriority())
-                .startDate(i.getStartDate())
-                .dueDate(i.getDueDate())
-                .build();
+    private IssueSummaryResponse toSummary(Issue issue) {
+        return IssueSummaryResponse.builder().id(issue.getId()).issueNumber(issue.getIssueNumber())
+                .title(issue.getTitle()).status(issue.getStatus()).priority(issue.getPriority())
+                .startDate(issue.getStartDate()).dueDate(issue.getDueDate()).build();
     }
 }

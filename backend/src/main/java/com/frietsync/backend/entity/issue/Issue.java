@@ -76,6 +76,6 @@ public class Issue extends BaseEntity {
     @Column(name = "github_issue_url", length = 1000)
     private String githubIssueUrl;
 
-    @Column(name = "github_issue_repository", length = 511)
+    @Column(name = "github_issue_repository", length = 500)
     private String githubIssueRepository;
 }

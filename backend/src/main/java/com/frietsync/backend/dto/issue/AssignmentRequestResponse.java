@@ -18,7 +18,6 @@ public class AssignmentRequestResponse {
     private String requesterName;
     private String requesterEmail;
     private AssignmentRequestStatus status;
-    private String message;
     private UUID decidedBy;
     private String decidedByName;
     private Instant decidedAt;

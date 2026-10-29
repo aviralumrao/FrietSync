@@ -1,6 +1,5 @@
 package com.frietsync.backend.dto.issue;
 
-import com.frietsync.backend.entity.issue.IssueLinkType;
 import lombok.Builder;
 import lombok.Data;
 
@@ -19,7 +18,6 @@ public class IssueLinkResponse {
     private UUID targetIssueId;
     private int targetIssueNumber;
     private String targetTitle;
-    private IssueLinkType type;
     private UUID createdBy;
     private String createdByName;
     private Instant createdAt;

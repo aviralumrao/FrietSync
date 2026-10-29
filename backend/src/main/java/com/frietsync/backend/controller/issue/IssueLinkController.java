@@ -1,10 +1,9 @@
 package com.frietsync.backend.controller.issue;
 
 import com.frietsync.backend.dto.issue.DependencyGraphResponse;
-import com.frietsync.backend.dto.issue.IssueImpactResponse;
 import com.frietsync.backend.dto.issue.IssueLinkRequest;
 import com.frietsync.backend.dto.issue.IssueLinkResponse;
-import com.frietsync.backend.dto.issue.IssueSummaryResponse;
+import com.frietsync.backend.dto.issue.LinkedIssueResponse;
 import com.frietsync.backend.service.issue.IssueLinkService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +36,7 @@ public class IssueLinkController {
     }
 
     @GetMapping("/issues/{issueId}/links")
-    public ResponseEntity<List<IssueLinkResponse>> list(@PathVariable UUID issueId,
+    public ResponseEntity<List<LinkedIssueResponse>> list(@PathVariable UUID issueId,
                                                         @AuthenticationPrincipal UUID userId) {
         return ResponseEntity.ok(linkService.list(issueId, userId));
     }
@@ -47,18 +46,6 @@ public class IssueLinkController {
                                        @AuthenticationPrincipal UUID userId) {
         linkService.delete(linkId, userId);
         return ResponseEntity.noContent().build();
-    }
-
-    @GetMapping("/issues/{issueId}/impact")
-    public ResponseEntity<IssueImpactResponse> impact(@PathVariable UUID issueId,
-                                                      @AuthenticationPrincipal UUID userId) {
-        return ResponseEntity.ok(linkService.impact(issueId, userId));
-    }
-
-    @GetMapping("/issues/{issueId}/dependencies")
-    public ResponseEntity<List<IssueSummaryResponse>> dependencies(@PathVariable UUID issueId,
-                                                                   @AuthenticationPrincipal UUID userId) {
-        return ResponseEntity.ok(linkService.dependencies(issueId, userId));
     }
 
     @GetMapping("/projects/{projectId}/dependency-graph")

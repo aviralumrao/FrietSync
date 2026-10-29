@@ -10,7 +10,7 @@ import java.util.UUID;
 @Data
 public class CreateSprintCommentRequest {
     @NotBlank
-    @Size(max = 2000)
+    @Size(max = 200)
     private String content;
 
     @Size(max = 50)

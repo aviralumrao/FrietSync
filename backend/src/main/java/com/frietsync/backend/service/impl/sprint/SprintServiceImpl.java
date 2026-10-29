@@ -56,7 +56,8 @@ public class SprintServiceImpl implements SprintService {
     public SprintResponse createSprint(UUID projectId, CreateSprintRequest request, UUID currentUserId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
-        requireProjectManagerOrTeamLead(project, currentUserId);
+
+        requireProjectManagerOrTeamLeadorAdmin(project, currentUserId);
         checkIssueProject(projectId, request.getIssueId(), request.getStartDate(), request.getEndDate());
         checkDates(request.getStartDate(), request.getEndDate());
         checkDatesWithinProject(project, request.getStartDate(), request.getEndDate());
@@ -85,6 +86,30 @@ public class SprintServiceImpl implements SprintService {
         checkMember(projectId, currentUserId);
         List<SprintResponse> responses = new ArrayList<>();
         for (Sprint sprint : sprintRepository.findByProjectId(projectId)) {
+            responses.add(toResponse(sprint));
+        }
+        return responses;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SprintResponse> listAssignedToMe(UUID currentUserId) {
+        UUID workspaceId = projectAccess.requireActiveWorkspace(currentUserId);
+        List<SprintResponse> responses = new ArrayList<>();
+        for (Sprint sprint : sprintRepository.findAssignedToUserInWorkspace(currentUserId, workspaceId)) {
+            responses.add(toResponse(sprint));
+        }
+        return responses;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SprintResponse> listSprintsForIssue(UUID issueId, UUID currentUserId) {
+        Issue issue = issueRepository.findById(issueId)
+                .orElseThrow(() -> new ResourceNotFoundException("Issue not found"));
+        checkMember(issue.getProjectId(), currentUserId);
+        List<SprintResponse> responses = new ArrayList<>();
+        for (Sprint sprint : sprintRepository.findByIssueIdOrderByCreatedAtDesc(issueId)) {
             responses.add(toResponse(sprint));
         }
         return responses;
@@ -147,6 +172,9 @@ public class SprintServiceImpl implements SprintService {
         requireManagerOrAssignedContributor(sprint, currentUserId);
         if (sprint.getStatus() != SprintStatus.PLANNED) {
             throw new BadRequestException("Only a planned sprint can be started");
+        }
+        if (sprint.getAssignedContributorId() == null) {
+            throw new BadRequestException("Only a sprint with an assigned contributor can be started");
         }
 
         sprint.setStatus(SprintStatus.ACTIVE);
@@ -290,7 +318,7 @@ public class SprintServiceImpl implements SprintService {
         }
     }
 
-    private void requireProjectManagerOrTeamLead(Project project, UUID userId) {
+    private void requireProjectManagerOrTeamLeadorAdmin(Project project, UUID userId) {
         projectAccess.requireWorkspaceAndActive(project, userId);
         if (userId != null && userId.equals(project.getAdminId())) {
             requireProjectManager(project, userId);
@@ -300,13 +328,8 @@ public class SprintServiceImpl implements SprintService {
             requireProjectManager(project, userId);
             return;
         }
-        if (userId == null || !userId.equals(project.getTeamLeadId())) {
+        if (userId == null || userId.equals(project.getTeamLeadId())) {
             throw new ForbiddenException("Only the project admin, project manager or team lead can create a sprint");
-        }
-        User teamLead = userRepository.findById(userId)
-                .orElseThrow(() -> new ForbiddenException("Team lead is not a valid user"));
-        if (teamLead.getRole() != Role.TEAM_LEAD) {
-            throw new ForbiddenException("Project team lead must have the TEAM_LEAD role");
         }
     }
 

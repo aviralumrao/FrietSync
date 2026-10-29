@@ -2,7 +2,6 @@ package com.frietsync.backend.service.impl.issue;
 
 import com.frietsync.backend.dto.issue.AssignIssueRequest;
 import com.frietsync.backend.dto.issue.AssignmentDecisionRequest;
-import com.frietsync.backend.dto.issue.AssignmentRequestBody;
 import com.frietsync.backend.dto.issue.AssignmentRequestResponse;
 import com.frietsync.backend.dto.issue.IssueResponse;
 import com.frietsync.backend.entity.issue.AssignmentRequestStatus;
@@ -115,7 +114,7 @@ public class IssueAssignmentServiceImpl implements IssueAssignmentService {
     }
 
     @Override
-    public AssignmentRequestResponse requestAssignment(UUID issueId, AssignmentRequestBody body, UUID userId) {
+    public AssignmentRequestResponse requestAssignment(UUID issueId, UUID userId) {
         Issue issue = access.issue(issueId);
         Project project = access.project(issue.getProjectId());
         Role role = access.requireMember(project, userId);
@@ -141,7 +140,6 @@ public class IssueAssignmentServiceImpl implements IssueAssignmentService {
             req.setUserId(userId);
         }
         req.setStatus(AssignmentRequestStatus.PENDING);
-        req.setMessage(body == null ? null : body.getMessage());
         req.setDecidedBy(null);
         req.setDecidedAt(null);
         requestRepository.save(req);
@@ -327,7 +325,6 @@ public class IssueAssignmentServiceImpl implements IssueAssignmentService {
                 .requesterName(requester == null ? null : requester.getName())
                 .requesterEmail(requester == null ? null : requester.getEmail())
                 .status(r.getStatus())
-                .message(r.getMessage())
                 .decidedBy(r.getDecidedBy())
                 .decidedByName(decider == null ? null : decider.getName())
                 .decidedAt(r.getDecidedAt())

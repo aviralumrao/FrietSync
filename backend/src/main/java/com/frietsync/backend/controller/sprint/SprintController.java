@@ -41,6 +41,19 @@ public class SprintController {
         return ResponseEntity.ok(sprintService.listSprints(projectId, currentUserId));
     }
 
+    @GetMapping("/sprints/me")
+    public ResponseEntity<List<SprintResponse>> listAssignedToMe(
+            @AuthenticationPrincipal UUID currentUserId) {
+        return ResponseEntity.ok(sprintService.listAssignedToMe(currentUserId));
+    }
+
+    @GetMapping("/issues/{issueId}/sprints")
+    public ResponseEntity<List<SprintResponse>> listSprintsForIssue(
+            @PathVariable UUID issueId,
+            @AuthenticationPrincipal UUID currentUserId) {
+        return ResponseEntity.ok(sprintService.listSprintsForIssue(issueId, currentUserId));
+    }
+
     @GetMapping("/sprints/{id}")
     public ResponseEntity<SprintResponse> getSprint(
             @PathVariable UUID id,

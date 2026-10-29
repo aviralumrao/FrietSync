@@ -28,6 +28,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/v1/auth/**", "/api/v1/check").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/integrations/google/callback",
                                 "/api/v1/integrations/github/callback").hasRole("OAUTH_CALLBACK")

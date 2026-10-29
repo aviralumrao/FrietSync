@@ -2,7 +2,6 @@ package com.frietsync.backend.service.issue;
 
 import com.frietsync.backend.dto.issue.AssignIssueRequest;
 import com.frietsync.backend.dto.issue.AssignmentDecisionRequest;
-import com.frietsync.backend.dto.issue.AssignmentRequestBody;
 import com.frietsync.backend.dto.issue.AssignmentRequestResponse;
 import com.frietsync.backend.dto.issue.IssueResponse;
 import com.frietsync.backend.entity.issue.AssignmentRequestStatus;
@@ -13,7 +12,7 @@ import java.util.UUID;
 public interface IssueAssignmentService {
     IssueResponse assign(UUID issueId, AssignIssueRequest request, UUID userId);
 
-    AssignmentRequestResponse requestAssignment(UUID issueId, AssignmentRequestBody body, UUID userId);
+    AssignmentRequestResponse requestAssignment(UUID issueId, UUID userId);
 
     AssignmentRequestResponse myRequest(UUID issueId, UUID userId);
 

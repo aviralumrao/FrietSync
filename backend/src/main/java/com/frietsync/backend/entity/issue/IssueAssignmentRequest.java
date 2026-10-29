@@ -33,9 +33,6 @@ public class IssueAssignmentRequest extends BaseEntity {
     @Column(nullable = false)
     private AssignmentRequestStatus status = AssignmentRequestStatus.PENDING;
 
-    @Column(length = 500)
-    private String message;
-
     @Column(name = "decided_by")
     private UUID decidedBy;
 

@@ -2,7 +2,6 @@ package com.frietsync.backend.controller.issue;
 
 import com.frietsync.backend.dto.issue.AssignIssueRequest;
 import com.frietsync.backend.dto.issue.AssignmentDecisionRequest;
-import com.frietsync.backend.dto.issue.AssignmentRequestBody;
 import com.frietsync.backend.dto.issue.AssignmentRequestResponse;
 import com.frietsync.backend.dto.issue.IssueResponse;
 import com.frietsync.backend.entity.issue.AssignmentRequestStatus;
@@ -41,10 +40,9 @@ public class IssueAssignmentController {
     @PostMapping("/issues/{issueId}/request")
     public ResponseEntity<AssignmentRequestResponse> requestAssignment(
             @PathVariable UUID issueId,
-            @Valid @RequestBody(required = false) AssignmentRequestBody body,
             @AuthenticationPrincipal UUID userId) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(assignmentService.requestAssignment(issueId, body, userId));
+                .body(assignmentService.requestAssignment(issueId, userId));
     }
 
     @GetMapping("/issues/{issueId}/request")

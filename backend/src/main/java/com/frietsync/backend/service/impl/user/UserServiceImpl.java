@@ -195,7 +195,6 @@ public class UserServiceImpl implements UserService {
         UUID attributionId = replacementId;
         accountCleanupRepository.deleteGoogleOAuthStates(userId);
         accountCleanupRepository.deleteGoogleConnection(userId);
-        accountCleanupRepository.deleteOtpsForEmail(user.getEmail());
         accountCleanupRepository.deleteInvitesForEmail(user.getEmail());
         accountCleanupRepository.deleteProjectDocumentsCreatedBy(userId);
         accountCleanupRepository.clearProjectDocumentEditor(userId);

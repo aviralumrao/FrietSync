@@ -22,6 +22,8 @@ public interface SprintRepository extends JpaRepository<Sprint, UUID> {
 
     List<Sprint> findByIssueId(UUID issueId);
 
+    List<Sprint> findByIssueIdOrderByCreatedAtDesc(UUID issueId);
+
     List<Sprint> findByIssueIdIn(List<UUID> issueIds);
 
     @Modifying
@@ -29,6 +31,12 @@ public interface SprintRepository extends JpaRepository<Sprint, UUID> {
     void clearIssueLink(@Param("issueId") UUID issueId);
 
     List<Sprint> findByAssignedContributorId(UUID assignedContributorId);
+
+    @Query("select sprint from Sprint sprint where sprint.assignedContributorId = :userId "
+            + "and sprint.projectId in (select project.id from Project project "
+            + "where project.workspaceId = :workspaceId) order by sprint.createdAt desc")
+    List<Sprint> findAssignedToUserInWorkspace(@Param("userId") UUID userId,
+                                              @Param("workspaceId") UUID workspaceId);
 
     long countByProjectId(UUID projectId);
 
