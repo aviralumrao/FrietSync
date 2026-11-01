@@ -124,6 +124,7 @@ public class CallServiceImpl implements CallService {
         publishEvent(project, call, CallEvent.Type.LEFT, userId);
     }
 
+
     @Override
     @Transactional
     public CallSession endCall(UUID projectId, UUID callId, UUID userId) {
@@ -234,6 +235,15 @@ public class CallServiceImpl implements CallService {
         String startedByName = call.getInitiatedBy().equals(userId)
                 ? actorName
                 : userName(call.getInitiatedBy());
+        List<com.frietsync.backend.dto.call.CallParticipantResponse> participants =
+                callParticipantRepository.findByCallIdAndConnectedTrue(call.getId()).stream()
+                        .map(p -> new com.frietsync.backend.dto.call.CallParticipantResponse(
+                                p.getUserId(),
+                                userName(p.getUserId()),
+                                p.getJoinedAt(),
+                                p.getLastActiveAt()
+                        ))
+                        .toList();
         eventPublisher.publishEvent(new CallEvent(
                 call.getProjectId(),
                 project.getName(),
@@ -249,6 +259,7 @@ public class CallServiceImpl implements CallService {
                         call.getStartedAt(),
                         call.getEndedAt()
                 ),
+                participants,
                 Instant.now()
         ));
     }

@@ -1,8 +1,10 @@
 package com.frietsync.backend.service.call;
 
+import com.frietsync.backend.dto.call.CallParticipantResponse;
 import com.frietsync.backend.entity.call.CallSession;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record CallEvent(
@@ -12,6 +14,7 @@ public record CallEvent(
         UUID actorId,
         String actorName,
         CallDetails call,
+        List<CallParticipantResponse> participants,
         Instant occurredAt
 ) {
 
