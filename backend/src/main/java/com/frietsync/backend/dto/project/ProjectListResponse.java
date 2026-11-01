@@ -1,6 +1,7 @@
 package com.frietsync.backend.dto.project;
 
 import com.frietsync.backend.entity.project.Project;
+import com.frietsync.backend.entity.project.ProjectStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -23,6 +24,7 @@ public class ProjectListResponse {
     private long sprintCount;
     private long issueCount;
     private double progressPercentage;
+    private ProjectStatus status;
 
     public static ProjectListResponse fromEntity(Project project, long sprintCount,
                                                  long issueCount, double progressPercentage) {
@@ -38,6 +40,7 @@ public class ProjectListResponse {
                 .sprintCount(sprintCount)
                 .issueCount(issueCount)
                 .progressPercentage(progressPercentage)
+                .status(project.getStatus())
                 .build();
     }
 }
