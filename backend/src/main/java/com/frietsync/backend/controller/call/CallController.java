@@ -2,7 +2,9 @@ package com.frietsync.backend.controller.call;
 
 import com.frietsync.backend.dto.call.CallResponse;
 import com.frietsync.backend.dto.call.JoinCallResponse;
+import com.frietsync.backend.dto.call.StartCallRequest;
 import com.frietsync.backend.config.call.JanusConfig;
+import com.frietsync.backend.entity.call.CallType;
 import com.frietsync.backend.service.call.CallService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -11,7 +13,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -27,16 +31,19 @@ public class CallController {
     @PostMapping
     public ResponseEntity<CallResponse> startCall(
             @PathVariable UUID projectId,
-            @AuthenticationPrincipal UUID userId) {
+            @AuthenticationPrincipal UUID userId,
+            @RequestBody(required = false) StartCallRequest request) {
+        CallType type = (request != null && request.type() != null) ? request.type() : CallType.VOICE;
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(CallResponse.from(callService.startCall(projectId, userId)));
+                .body(CallResponse.from(callService.startCall(projectId, userId, type)));
     }
 
     @GetMapping("/active")
     public ResponseEntity<CallResponse> getActiveCall(
             @PathVariable UUID projectId,
-            @AuthenticationPrincipal UUID userId) {
-        return ResponseEntity.ok(CallResponse.from(callService.getActiveCall(projectId, userId)));
+            @AuthenticationPrincipal UUID userId,
+            @RequestParam(required = false, defaultValue = "VOICE") CallType type) {
+        return ResponseEntity.ok(CallResponse.from(callService.getActiveCall(projectId, userId, type)));
     }
 
     @PostMapping("/{callId}/join")

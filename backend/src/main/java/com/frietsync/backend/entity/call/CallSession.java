@@ -28,6 +28,10 @@ public class CallSession {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    private CallType type = CallType.VOICE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     private CallStatus status = CallStatus.ACTIVE;
 
     @Column(name = "started_at", nullable = false)

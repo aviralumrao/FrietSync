@@ -1,6 +1,7 @@
 package com.frietsync.backend.repository.call;
 
 import com.frietsync.backend.entity.call.CallSession;
+import com.frietsync.backend.entity.call.CallType;
 
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,6 +18,12 @@ public interface CallSessionRepository
 
     Optional<CallSession> findByProjectIdAndStatus(
             UUID projectId,
+            CallSession.CallStatus status
+    );
+
+    Optional<CallSession> findByProjectIdAndTypeAndStatus(
+            UUID projectId,
+            CallType type,
             CallSession.CallStatus status
     );
 

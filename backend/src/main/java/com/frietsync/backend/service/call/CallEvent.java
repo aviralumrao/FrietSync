@@ -2,6 +2,7 @@ package com.frietsync.backend.service.call;
 
 import com.frietsync.backend.dto.call.CallParticipantResponse;
 import com.frietsync.backend.entity.call.CallSession;
+import com.frietsync.backend.entity.call.CallType;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,6 +22,7 @@ public record CallEvent(
     public record CallDetails(
             UUID id,
             long roomId,
+            CallType type,
             UUID startedById,
             String startedByName,
             CallSession.CallStatus status,

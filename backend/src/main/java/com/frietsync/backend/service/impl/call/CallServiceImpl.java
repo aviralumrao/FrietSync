@@ -2,6 +2,7 @@ package com.frietsync.backend.service.impl.call;
 
 import com.frietsync.backend.entity.call.CallParticipant;
 import com.frietsync.backend.entity.call.CallSession;
+import com.frietsync.backend.entity.call.CallType;
 import com.frietsync.backend.entity.project.Project;
 import com.frietsync.backend.entity.user.Role;
 import com.frietsync.backend.entity.user.User;
@@ -48,34 +49,35 @@ public class CallServiceImpl implements CallService {
 
     @Override
     @Transactional
-    public CallSession startCall(UUID projectId, UUID userId) {
+    public CallSession startCall(UUID projectId, UUID userId, CallType type) {
         Project project = projectRepository.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
         projectAccess.requireActiveProject(project);
         projectAccess.requireMember(project, userId);
         if (callSessionRepository
-                .findByProjectIdAndStatus(
+                .findByProjectIdAndTypeAndStatus(
                         projectId,
+                        type,
                         CallSession.CallStatus.ACTIVE
                 )
                 .isPresent()) {
             throw new BadRequestException(
-                    "An active call already exists for this project"
+                    "An active " + type.name().toLowerCase() + " call already exists for this project"
             );
         }
 
-        long roomId = janusService.createRoom();
-        cleanupRoomIfTransactionRollsBack(roomId);
+        long roomId = janusService.createRoom(type);
+        cleanupRoomIfTransactionRollsBack(roomId, type);
 
         CallSession call = new CallSession();
         call.setProjectId(projectId);
         call.setInitiatedBy(userId);
         call.setRoomId(roomId);
+        call.setType(type);
         call.setStatus(CallSession.CallStatus.ACTIVE);
 
         CallSession savedCall = callSessionRepository.save(call);
 
-        // Add initiator as active participant
         upsertParticipant(savedCall.getId(), userId, true);
 
         publishEvent(project, savedCall, CallEvent.Type.STARTED, userId);
@@ -84,14 +86,13 @@ public class CallServiceImpl implements CallService {
 
     @Override
     @Transactional
-    public CallSession getActiveCall(UUID projectId, UUID userId) {
+    public CallSession getActiveCall(UUID projectId, UUID userId, CallType type) {
         Project project = projectAccess.project(projectId);
         projectAccess.requireMember(project, userId);
-        CallSession call = callSessionRepository.findByProjectIdAndStatus(
-                        projectId, CallSession.CallStatus.ACTIVE)
-                .orElseThrow(() -> new ResourceNotFoundException("No active call for this project"));
+        CallSession call = callSessionRepository.findByProjectIdAndTypeAndStatus(
+                        projectId, type, CallSession.CallStatus.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("No active " + type.name().toLowerCase() + " call for this project"));
 
-        // Touch participant activity on fetch/heartbeat
         upsertParticipant(call.getId(), userId, true);
         return call;
     }
@@ -152,14 +153,13 @@ public class CallServiceImpl implements CallService {
 
         CallSession savedCall = callSessionRepository.save(call);
 
-        // Mark all participants disconnected
         for (CallParticipant p : callParticipantRepository.findByCallId(savedCall.getId())) {
             p.setConnected(false);
             callParticipantRepository.save(p);
         }
 
         publishEvent(project, savedCall, CallEvent.Type.ENDED, actorUserId);
-        cleanupRoomAfterCommit(savedCall.getId(), savedCall.getRoomId());
+        cleanupRoomAfterCommit(savedCall.getId(), savedCall.getRoomId(), savedCall.getType());
         return savedCall;
     }
 
@@ -196,13 +196,13 @@ public class CallServiceImpl implements CallService {
         callParticipantRepository.save(participant);
     }
 
-    private void cleanupRoomIfTransactionRollsBack(long roomId) {
+    private void cleanupRoomIfTransactionRollsBack(long roomId, CallType type) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
                 if (status != STATUS_COMMITTED) {
                     try {
-                        janusService.destroyRoom(roomId);
+                        janusService.destroyRoom(roomId, type);
                     } catch (RuntimeException exception) {
                         log.error("Could not clean up Janus room {} after call creation rollback",
                                 roomId, exception);
@@ -212,11 +212,11 @@ public class CallServiceImpl implements CallService {
         });
     }
 
-    private void cleanupRoomAfterCommit(UUID callId, long roomId) {
+    private void cleanupRoomAfterCommit(UUID callId, long roomId, CallType type) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                callRoomCleanupService.cleanupEndedCall(callId, roomId);
+                callRoomCleanupService.cleanupEndedCall(callId, roomId, type);
             }
         });
     }
@@ -253,6 +253,7 @@ public class CallServiceImpl implements CallService {
                 new CallEvent.CallDetails(
                         call.getId(),
                         call.getRoomId(),
+                        call.getType(),
                         call.getInitiatedBy(),
                         startedByName,
                         call.getStatus(),

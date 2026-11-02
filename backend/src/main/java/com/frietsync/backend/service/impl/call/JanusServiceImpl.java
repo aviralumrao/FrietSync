@@ -1,6 +1,7 @@
 package com.frietsync.backend.service.impl.call;
 
 import com.frietsync.backend.config.call.JanusConfig;
+import com.frietsync.backend.entity.call.CallType;
 import com.frietsync.backend.service.call.JanusService;
 
 import lombok.RequiredArgsConstructor;
@@ -29,12 +30,12 @@ public class JanusServiceImpl implements JanusService {
     }
 
     @Override
-    public long createRoom() {
+    public long createRoom(CallType type) {
         long sessionId = createSession();
         long handleId = 0;
 
         try {
-            handleId = attachAudioBridge(sessionId);
+            handleId = type == CallType.VIDEO ? attachVideoRoom(sessionId) : attachAudioBridge(sessionId);
 
             long roomId = ThreadLocalRandom.current()
                     .nextLong(100_000_000L, 9_000_000_000L);
@@ -42,10 +43,18 @@ public class JanusServiceImpl implements JanusService {
             Map<String, Object> room = new HashMap<>();
             room.put("request", "create");
             room.put("room", roomId);
-            room.put("description", "FrietSync voice room");
-            room.put("sampling_rate", 16000);
-            room.put("record", false);
-            room.put("audiolevel_event", true);
+            if (type == CallType.VIDEO) {
+                room.put("description", "FrietSync video room");
+                room.put("publishers", 16);
+                room.put("videocodec", "vp8");
+                room.put("audio", true);
+                room.put("video", true);
+            } else {
+                room.put("description", "FrietSync voice room");
+                room.put("sampling_rate", 16000);
+                room.put("record", false);
+                room.put("audiolevel_event", true);
+            }
 
             if (hasText(janusConfig.adminKey())) {
                 room.put("admin_key", janusConfig.adminKey());
@@ -69,8 +78,9 @@ public class JanusServiceImpl implements JanusService {
             );
 
             JsonNode data = response.path("plugindata").path("data");
+            String pluginKey = type == CallType.VIDEO ? "videoroom" : "audiobridge";
 
-            if (!"created".equals(data.path("audiobridge").asText())
+            if (!"created".equals(data.path(pluginKey).asText())
                     || data.path("room").asLong() != roomId) {
                 throw new IllegalStateException(
                         "Janus did not confirm room creation: " + response
@@ -85,17 +95,17 @@ public class JanusServiceImpl implements JanusService {
     }
 
     @Override
-    public void destroyRoom(long roomId) {
+    public void destroyRoom(long roomId, CallType type) {
         long sessionId = createSession();
 
         try {
-            long handleId = attachAudioBridge(sessionId);
+            long handleId = type == CallType.VIDEO ? attachVideoRoom(sessionId) : attachAudioBridge(sessionId);
 
             Map<String, Object> existenceRequest = new HashMap<>();
             existenceRequest.put("request", "exists");
             existenceRequest.put("room", roomId);
 
-            if (!roomExists(sessionId, handleId, existenceRequest, roomId)) {
+            if (!roomExists(sessionId, handleId, existenceRequest, roomId, type)) {
                 return;
             }
 
@@ -117,7 +127,8 @@ public class JanusServiceImpl implements JanusService {
             );
 
             JsonNode data = response.path("plugindata").path("data");
-            String result = data.path("audiobridge").asText();
+            String pluginKey = type == CallType.VIDEO ? "videoroom" : "audiobridge";
+            String result = data.path(pluginKey).asText();
 
             if (!"destroyed".equals(result)) {
                 throw new IllegalStateException(
@@ -130,7 +141,7 @@ public class JanusServiceImpl implements JanusService {
         }
     }
 
-    private boolean roomExists(long sessionId, long handleId, Map<String, Object> request, long roomId) {
+    private boolean roomExists(long sessionId, long handleId, Map<String, Object> request, long roomId, CallType type) {
         JsonNode response = post(
                 "/%d/%d".formatted(sessionId, handleId),
                 Map.of(
@@ -140,7 +151,8 @@ public class JanusServiceImpl implements JanusService {
                 )
         );
         JsonNode data = response.path("plugindata").path("data");
-        if (!"success".equals(data.path("audiobridge").asText())
+        String pluginKey = type == CallType.VIDEO ? "videoroom" : "audiobridge";
+        if (!"success".equals(data.path(pluginKey).asText())
                 || data.path("room").asLong() != roomId
                 || !data.path("exists").isBoolean()) {
             throw new IllegalStateException("Janus returned an invalid room-existence response: " + response);
@@ -187,6 +199,29 @@ public class JanusServiceImpl implements JanusService {
         if (handleId <= 0) {
             throw new IllegalStateException(
                     "Janus returned an invalid plugin handle ID"
+            );
+        }
+
+        return handleId;
+    }
+
+    private long attachVideoRoom(long sessionId) {
+        JsonNode response = post(
+                "/" + sessionId,
+                Map.of(
+                        "janus", "attach",
+                        "plugin", "janus.plugin.videoroom",
+                        "transaction", transaction()
+                )
+        );
+
+        requireSuccess(response);
+
+        long handleId = response.path("data").path("id").asLong();
+
+        if (handleId <= 0) {
+            throw new IllegalStateException(
+                    "Janus returned an invalid videoroom plugin handle ID"
             );
         }
 

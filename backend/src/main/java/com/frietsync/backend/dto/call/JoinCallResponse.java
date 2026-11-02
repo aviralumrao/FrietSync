@@ -1,6 +1,7 @@
 package com.frietsync.backend.dto.call;
 
 import com.frietsync.backend.entity.call.CallSession;
+import com.frietsync.backend.entity.call.CallType;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -9,6 +10,7 @@ public record JoinCallResponse(
         UUID id,
         UUID projectId,
         long roomId,
+        CallType type,
         String roomPin,
         UUID initiatedBy,
         CallSession.CallStatus status,
@@ -21,6 +23,7 @@ public record JoinCallResponse(
                 call.getId(),
                 call.getProjectId(),
                 call.getRoomId(),
+                call.getType(),
                 roomPin,
                 call.getInitiatedBy(),
                 call.getStatus(),
