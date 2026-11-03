@@ -33,4 +33,6 @@ public class SignupRequest {
             message = "Password must contain uppercase, lowercase, number and symbol"
     )
     private String password;
+
+    private String recaptchaToken;
 }

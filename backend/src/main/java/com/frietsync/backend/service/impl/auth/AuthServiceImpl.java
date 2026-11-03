@@ -11,6 +11,7 @@ import com.frietsync.backend.service.auth.AuthService;
 import com.frietsync.backend.dto.user.UserResponse;
 import com.frietsync.backend.service.impl.auth.OtpService;
 import com.frietsync.backend.service.impl.auth.RefreshTokenService;
+import com.frietsync.backend.service.recaptcha.RecaptchaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -35,11 +36,13 @@ public class AuthServiceImpl implements AuthService {
     private final OtpService otpService;
     private final RefreshTokenService refreshTokenService;
     private final StringRedisTemplate redisTemplate;
+    private final RecaptchaService recaptchaService;
 
     private static final Duration PENDING_SIGNUP_TTL = Duration.ofMinutes(15);
 
     @Override
     public void signup(SignupRequest request, String ipAddress) {
+        recaptchaService.verify(request.getRecaptchaToken(), "signup");
         String email = normalizeEmail(request.getEmail());
         otpService.enforceRequestRateLimit(email, ipAddress);
         User existingUser = userRepository.findByEmail(email).orElse(null);
@@ -71,6 +74,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
+        recaptchaService.verify(request.getRecaptchaToken(), "login");
         String email = normalizeEmail(request.getEmail());
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BadRequestException("Invalid email or password"));
@@ -129,6 +133,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void forgotPassword(ForgotPasswordRequest request, String ipAddress) {
+        recaptchaService.verify(request.getRecaptchaToken(), "forgot_password");
         String email = normalizeEmail(request.getEmail());
         otpService.enforceRequestRateLimit(email, ipAddress);
         if (userRepository.existsByEmail(email)) {
