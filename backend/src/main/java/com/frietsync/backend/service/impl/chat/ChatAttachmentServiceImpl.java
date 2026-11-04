@@ -3,6 +3,7 @@ package com.frietsync.backend.service.impl.chat;
 import com.frietsync.backend.dto.chat.ChatAttachmentResponse;
 import com.frietsync.backend.dto.chat.ChatAttachmentPageResponse;
 import com.frietsync.backend.entity.chat.ChatAttachment;
+import com.frietsync.backend.service.security.VirusScanService;
 import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
 import com.frietsync.backend.repository.chat.ChatAttachmentRepository;
@@ -48,6 +49,7 @@ public class ChatAttachmentServiceImpl implements ChatAttachmentService {
     private final ChatAccessService chatAccessService;
     private final S3Client s3Client;
     private final S3ObjectCleanupService cleanupService;
+    private final VirusScanService virusScanService;
 
     @Value("${aws.s3.bucket:}")
     private String bucketName;
@@ -64,6 +66,8 @@ public class ChatAttachmentServiceImpl implements ChatAttachmentService {
         if (bucketName == null || bucketName.isBlank()) {
             throw new BadRequestException("S3 bucket is not configured");
         }
+
+        virusScanService.scanFile(file);
 
         String fileName = sanitize(file.getOriginalFilename());
         S3UploadValidator.validateChatAttachment(file, fileName);

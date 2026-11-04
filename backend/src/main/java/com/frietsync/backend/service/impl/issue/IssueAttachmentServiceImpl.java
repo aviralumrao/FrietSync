@@ -4,7 +4,9 @@ import com.frietsync.backend.dto.issue.AttachmentResponse;
 import com.frietsync.backend.entity.issue.Issue;
 import com.frietsync.backend.entity.issue.IssueAttachment;
 import com.frietsync.backend.entity.issue.IssueHistoryAction;
+import com.frietsync.backend.entity.project.Project;
 import com.frietsync.backend.entity.user.Role;
+import com.frietsync.backend.service.security.VirusScanService;
 import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
@@ -51,6 +53,7 @@ public class IssueAttachmentServiceImpl implements IssueAttachmentService {
     private final S3Client s3Client;
     private final S3ObjectCleanupService cleanupService;
     private final UserRepository userRepository;
+    private final VirusScanService virusScanService;
 
     @Value("${app.storage.path:./uploads}")
     private String storagePath;
@@ -61,7 +64,7 @@ public class IssueAttachmentServiceImpl implements IssueAttachmentService {
     @Override
     public AttachmentResponse add(UUID issueId, MultipartFile file, UUID userId) {
         Issue issue = access.issue(issueId);
-        com.frietsync.backend.entity.project.Project project = access.project(issue.getProjectId());
+        Project project = access.project(issue.getProjectId());
         access.requireActiveProject(project);
         access.requireMember(project, userId);
         if (file == null || file.isEmpty()) {
@@ -73,6 +76,8 @@ public class IssueAttachmentServiceImpl implements IssueAttachmentService {
         if (bucketName == null || bucketName.isBlank()) {
             throw new BadRequestException("S3 bucket is not configured");
         }
+
+        virusScanService.scanFile(file);
 
         String fileName = sanitize(file.getOriginalFilename());
         String contentType = S3UploadValidator.validateIssueAttachment(file, fileName);
@@ -118,7 +123,8 @@ public class IssueAttachmentServiceImpl implements IssueAttachmentService {
     public void delete(UUID attachmentId, UUID userId) {
         IssueAttachment attachment = find(attachmentId);
         Issue issue = access.issue(attachment.getIssueId());
-        Role role = access.requireMember(access.project(issue.getProjectId()), userId);
+        Project project = access.project(issue.getProjectId());
+        Role role = access.requireMember(project, userId);
 
         boolean allowed = userId.equals(attachment.getUploadedBy())
                 || role == Role.ADMIN
