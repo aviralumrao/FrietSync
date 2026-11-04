@@ -8,6 +8,7 @@ import com.frietsync.backend.entity.issue.Issue;
 import com.frietsync.backend.entity.project.ProjectMember;
 import com.frietsync.backend.entity.project.Release;
 import com.frietsync.backend.entity.project.ReleaseIssue;
+import com.frietsync.backend.service.security.VirusScanService;
 import com.frietsync.backend.exception.ForbiddenException;
 import com.frietsync.backend.exception.BadRequestException;
 import com.frietsync.backend.exception.ResourceNotFoundException;
@@ -50,6 +51,7 @@ public class ReleaseServiceImpl implements ReleaseService {
     private final S3Presigner s3Presigner;
     private final S3ObjectCleanupService cleanupService;
     private final ProjectAccess projectAccess;
+    private final VirusScanService virusScanService;
 
     @Value("${aws.s3.bucket:}")
     private String bucketName;
@@ -142,6 +144,8 @@ public class ReleaseServiceImpl implements ReleaseService {
         if (bucketName == null || bucketName.isBlank()) {
             throw new BadRequestException("S3 bucket is not configured");
         }
+
+        virusScanService.scanFile(file);
 
         String originalName = file.getOriginalFilename();
         String safeName = originalName == null ? "release-file" : originalName.replaceAll("[^A-Za-z0-9._-]", "_");

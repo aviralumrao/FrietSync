@@ -42,10 +42,11 @@ import com.frietsync.backend.repository.user.UserRepository;
 import com.frietsync.backend.repository.workspace.WorkspaceRepository;
 import com.frietsync.backend.service.project.ProjectService;
 import com.frietsync.backend.service.invite.InviteService;
+import com.frietsync.backend.service.issue.IssueService;
 import com.frietsync.backend.service.project.ReleaseService;
 import com.frietsync.backend.service.impl.project.ProjectAccess;
 import com.frietsync.backend.service.impl.user.ProfilePictureUrlService;
-import com.frietsync.backend.service.issue.IssueService;
+import com.frietsync.backend.service.impl.storage.S3UploadValidator;
 import com.frietsync.backend.service.notification.NotificationPublisher;
 import com.frietsync.backend.service.impl.issue.IssueHistoryRecorder;
 import lombok.RequiredArgsConstructor;
@@ -102,6 +103,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
     private final com.frietsync.backend.service.impl.issue.S3ObjectCleanupService cleanupService;
+    private final com.frietsync.backend.service.security.VirusScanService virusScanService;
 
     @Value("${aws.s3.bucket:}")
     private String bucketName;
@@ -527,19 +529,19 @@ public class ProjectServiceImpl implements ProjectService {
         if (bucketName == null || bucketName.isBlank()) {
             throw new StorageServiceException("Project profile picture storage is not configured");
         }
-        String originalName = file.getOriginalFilename();
-        String safeName = originalName == null ? "project-picture.png"
-                : originalName.replaceAll("[^A-Za-z0-9._-]", "_");
-        if (safeName.length() > 255) safeName = safeName.substring(safeName.length() - 255);
-        String extension = safeName.substring(safeName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
-        String contentType = switch (extension) {
-            case "png" -> "image/png";
-            case "jpg", "jpeg" -> "image/jpeg";
-            default -> throw new BadRequestException("Project picture must be a PNG, JPG, or JPEG image");
-        };
         if (file.isEmpty() || file.getSize() > 5L * 1024 * 1024) {
             throw new BadRequestException("Project picture must be non-empty and no larger than 5 MB");
         }
+
+        virusScanService.scanFile(file);
+        String originalName = file.getOriginalFilename();
+        String safeName = originalName == null ? "profile-picture.png"
+                : originalName.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (safeName.length() > 255) {
+            safeName = safeName.substring(safeName.length() - 255);
+        }
+        String contentType = S3UploadValidator.validateProfilePicture(file, safeName);
+        String extension = safeName.substring(safeName.lastIndexOf('.') + 1).toLowerCase();
         String key = "projects/" + projectId + "/profile/" + UUID.randomUUID() + "." + extension;
         try (var input = file.getInputStream()) {
             s3Client.putObject(PutObjectRequest.builder().bucket(bucketName).key(key)
