@@ -28,6 +28,10 @@ public class DailyBriefingResponse {
 
     private List<IssueSummaryResponse> assignedTasks;
     private List<BriefingMeetingResponse> upcomingMeetings;
+    private List<BriefingPollSummaryResponse> activePolls;
+    private List<BriefingInviteSummaryResponse> pendingInvites;
+    private List<BriefingSprintSummaryResponse> assignedSprints;
+    private List<BriefingNotificationSummaryResponse> recentNotifications;
     private List<ActivityResponse> projectUpdates;
 
     private List<String> projectAlerts;

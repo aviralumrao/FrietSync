@@ -2,6 +2,10 @@ package com.frietsync.backend.service.impl.briefing;
 
 import com.frietsync.backend.dto.activity.ActivityResponse;
 import com.frietsync.backend.dto.briefing.BriefingMeetingResponse;
+import com.frietsync.backend.dto.briefing.BriefingPollSummaryResponse;
+import com.frietsync.backend.dto.briefing.BriefingInviteSummaryResponse;
+import com.frietsync.backend.dto.briefing.BriefingSprintSummaryResponse;
+import com.frietsync.backend.dto.briefing.BriefingNotificationSummaryResponse;
 import com.frietsync.backend.dto.briefing.BriefingPreferenceResponse;
 import com.frietsync.backend.dto.briefing.DailyBriefingResponse;
 import com.frietsync.backend.dto.briefing.UpdateBriefingPreferenceRequest;
@@ -29,6 +33,10 @@ import com.frietsync.backend.repository.meeting.MeetingRepository;
 import com.frietsync.backend.repository.project.ProjectRepository;
 import com.frietsync.backend.repository.sprint.SprintRepository;
 import com.frietsync.backend.repository.user.UserRepository;
+import com.frietsync.backend.repository.poll.PollRepository;
+import com.frietsync.backend.repository.invite.InviteRepository;
+import com.frietsync.backend.repository.notification.NotificationRepository;
+import org.springframework.data.domain.Pageable;
 import com.frietsync.backend.service.briefing.BriefingService;
 import com.frietsync.backend.service.impl.activity.ActivityMessageFormatter;
 import com.frietsync.backend.service.notification.NotificationService;
@@ -100,6 +108,9 @@ public class BriefingServiceImpl implements BriefingService {
     private final ProjectRepository projectRepository;
     private final SprintRepository sprintRepository;
     private final ProjectAccess projectAccess;
+    private final PollRepository pollRepository;
+    private final InviteRepository inviteRepository;
+    private final NotificationRepository notificationRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -107,6 +118,80 @@ public class BriefingServiceImpl implements BriefingService {
         UUID workspaceId = projectAccess.requireActiveWorkspace(userId);
         ZoneId zone = zoneOf(userId);
         return build(userId, LocalDate.now(zone), zone, workspaceId);
+    }
+
+    private List<BriefingPollSummaryResponse> fetchActivePolls(UUID userId, Set<UUID> workspaceProjectIds) {
+        List<BriefingPollSummaryResponse> activePolls = new ArrayList<>();
+        for (UUID projectId : workspaceProjectIds) {
+            List<com.frietsync.backend.entity.poll.Poll> polls = pollRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
+            for (com.frietsync.backend.entity.poll.Poll poll : polls) {
+                if (com.frietsync.backend.entity.poll.PollStatus.OPEN.equals(poll.getStatus()) &&
+                    poll.getEndsAt() != null && poll.getEndsAt().isAfter(Instant.now())) {
+                    BriefingPollSummaryResponse summary = BriefingPollSummaryResponse.builder()
+                            .pollId(poll.getId())
+                            .projectId(poll.getProjectId())
+                            .question(poll.getQuestion())
+                            .status(poll.getStatus().name())
+                            .endsAt(poll.getEndsAt())
+                            .build();
+                    activePolls.add(summary);
+                }
+            }
+        }
+        return activePolls;
+    }
+
+    private List<BriefingInviteSummaryResponse> fetchPendingInvites(UUID userId, Set<UUID> workspaceProjectIds) {
+        List<BriefingInviteSummaryResponse> pendingInvites = new ArrayList<>();
+        for (UUID projectId : workspaceProjectIds) {
+            List<com.frietsync.backend.entity.invite.Invite> invites = inviteRepository.findByProjectIdAndStatusOrderByCreatedAtDesc(projectId, com.frietsync.backend.entity.invite.InviteStatus.PENDING);
+            for (com.frietsync.backend.entity.invite.Invite invite : invites) {
+                BriefingInviteSummaryResponse summary = BriefingInviteSummaryResponse.builder()
+                        .inviteId(invite.getId())
+                        .email(invite.getEmail())
+                        .role(invite.getRole().name())
+                        .purpose(invite.getPurpose().name())
+                        .projectId(invite.getProjectId())
+                        .expiresAt(invite.getExpiresAt())
+                        .build();
+                pendingInvites.add(summary);
+            }
+        }
+        return pendingInvites;
+    }
+
+    private List<BriefingSprintSummaryResponse> fetchAssignedSprints(UUID userId, UUID workspaceId) {
+        List<BriefingSprintSummaryResponse> assignedSprints = new ArrayList<>();
+        List<com.frietsync.backend.entity.sprint.Sprint> sprints = sprintRepository.findAssignedToUserInWorkspace(userId, workspaceId);
+        for (com.frietsync.backend.entity.sprint.Sprint sprint : sprints) {
+            BriefingSprintSummaryResponse summary = BriefingSprintSummaryResponse.builder()
+                    .sprintId(sprint.getId())
+                    .projectId(sprint.getProjectId())
+                    .name(sprint.getName())
+                    .status(sprint.getStatus().name())
+                    .startDate(sprint.getStartDate())
+                    .endDate(sprint.getEndDate())
+                    .build();
+            assignedSprints.add(summary);
+        }
+        return assignedSprints;
+    }
+
+    private List<BriefingNotificationSummaryResponse> fetchRecentNotifications(UUID userId) {
+        List<BriefingNotificationSummaryResponse> recentNotifications = new ArrayList<>();
+        List<com.frietsync.backend.entity.notification.Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, Pageable.unpaged()).getContent();
+        for (com.frietsync.backend.entity.notification.Notification notification : notifications) {
+            BriefingNotificationSummaryResponse summary = BriefingNotificationSummaryResponse.builder()
+                    .notificationId(notification.getId())
+                    .title(notification.getTitle())
+                    .message(notification.getMessage())
+                    .type(notification.getType().name())
+                    .read(notification.isSeen())
+                    .createdAt(notification.getCreatedAt())
+                    .build();
+            recentNotifications.add(summary);
+        }
+        return recentNotifications;
     }
 
     @Override
@@ -259,6 +344,10 @@ public class BriefingServiceImpl implements BriefingService {
             meetingsFrom = moment;
         }
         List<BriefingMeetingResponse> meetings = meetingsFor(userId, meetingsFrom, dayEnd, workspaceProjectIds);
+        List<BriefingPollSummaryResponse> activePolls = fetchActivePolls(userId, workspaceProjectIds);
+        List<BriefingInviteSummaryResponse> pendingInvites = fetchPendingInvites(userId, workspaceProjectIds);
+        List<BriefingSprintSummaryResponse> assignedSprints = fetchAssignedSprints(userId, workspaceId);
+        List<BriefingNotificationSummaryResponse> recentNotifications = fetchRecentNotifications(userId);
         List<ActivityResponse> updates = projectUpdates(userId, myIssues, newSince, moment);
 
         List<String> alerts = new ArrayList<>();
@@ -291,6 +380,10 @@ public class BriefingServiceImpl implements BriefingService {
                 .newIssues(newIssues)
                 .assignedTasks(assigned)
                 .upcomingMeetings(meetings)
+                .activePolls(activePolls)
+                .pendingInvites(pendingInvites)
+                .assignedSprints(assignedSprints)
+                .recentNotifications(recentNotifications)
                 .projectUpdates(updates)
                 .projectAlerts(alerts)
                 .unreadNotifications(unread)
