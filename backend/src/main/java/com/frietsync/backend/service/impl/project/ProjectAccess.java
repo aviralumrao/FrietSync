@@ -29,8 +29,12 @@ public class ProjectAccess {
     private final WorkspaceRepository workspaceRepository;
 
     public Project project(UUID projectId) {
-        return projectRepository.findById(projectId)
+        Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
+        if (project.getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Project not found");
+        }
+        return project;
     }
 
     public void requireActiveProject(Project project) {

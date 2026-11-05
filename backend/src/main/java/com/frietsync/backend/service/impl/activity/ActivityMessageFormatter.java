@@ -62,6 +62,7 @@ public final class ActivityMessageFormatter {
             case LINK_ADDED -> actor + " linked " + issue;
             case LINK_REMOVED -> actor + " removed a link from " + issue;
             case DELETED -> actor + " deleted " + issue;
+            case RESTORED -> actor + " restored " + issue;
             case UPDATED -> actor + " updated " + issue;
         };
         return limit(message + ".");

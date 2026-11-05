@@ -442,7 +442,7 @@ public class BriefingServiceImpl implements BriefingService {
                     alerts.add(project.getName() + " has its deadline in " + days + " day(s)");
                 }
             }
-            for (Sprint sprint : sprintRepository.findByProjectId(project.getId())) {
+            for (Sprint sprint : sprintRepository.findByProjectIdAndDeletedAtIsNull(project.getId())) {
                 if (sprint.getStatus() != SprintStatus.ACTIVE || sprint.getEndDate() == null) {
                     continue;
                 }

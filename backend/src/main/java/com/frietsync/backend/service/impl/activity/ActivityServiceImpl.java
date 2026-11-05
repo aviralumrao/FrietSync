@@ -112,7 +112,7 @@ public class ActivityServiceImpl implements ActivityService {
         }
 
         Map<UUID, List<PresenceSprintResponse>> sprintsByUser = new LinkedHashMap<>();
-        for (Sprint sprint : sprintRepository.findByProjectId(projectId)) {
+        for (Sprint sprint : sprintRepository.findByProjectIdAndDeletedAtIsNull(projectId)) {
             UUID contributorId = sprint.getAssignedContributorId();
             if (sprint.getStatus() != SprintStatus.ACTIVE || contributorId == null) {
                 continue;
@@ -301,7 +301,7 @@ public class ActivityServiceImpl implements ActivityService {
         int active = 0;
         int completed = 0;
         int overdueSprints = 0;
-        List<Sprint> sprints = sprintRepository.findByProjectId(project.getId());
+        List<Sprint> sprints = sprintRepository.findByProjectIdAndDeletedAtIsNull(project.getId());
         for (Sprint sprint : sprints) {
             if (sprint.getStatus() == SprintStatus.PLANNED) {
                 planned++;

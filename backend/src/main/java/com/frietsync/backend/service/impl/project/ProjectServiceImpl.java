@@ -165,8 +165,8 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     private ProjectListResponse toListResponse(Project project) {
-        long totalSprints = sprintRepository.countByProjectId(project.getId());
-        long completedSprints = sprintRepository.countByProjectIdAndStatus(
+        long totalSprints = sprintRepository.countByProjectIdAndDeletedAtIsNull(project.getId());
+        long completedSprints = sprintRepository.countByProjectIdAndStatusAndDeletedAtIsNull(
                 project.getId(), SprintStatus.COMPLETED);
         double progress = totalSprints == 0 ? 0 : completedSprints * 100.0 / totalSprints;
         long issueCount = issueRepository.countByProjectIdAndDeletedAtIsNull(project.getId());
@@ -249,8 +249,8 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     private ProjectResponse toResponse(Project project) {
-        long totalSprints = sprintRepository.countByProjectId(project.getId());
-        long completedSprints = sprintRepository.countByProjectIdAndStatus(
+        long totalSprints = sprintRepository.countByProjectIdAndDeletedAtIsNull(project.getId());
+        long completedSprints = sprintRepository.countByProjectIdAndStatusAndDeletedAtIsNull(
                 project.getId(), SprintStatus.COMPLETED);
         double progress = 0;
         if (totalSprints > 0) {
@@ -308,30 +308,42 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     @Transactional
     public void delete(UUID projectId, UUID userId) {
-        Project project = find(projectId);
+        Project project = projectRepository.findByIdForUpdate(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
         projectAccess.requireWorkspaceAndActive(project, userId);
         if (!userId.equals(project.getAdminId())) {
             throw new ForbiddenException("Only the admin can delete this project");
         }
-        sprintAssignmentRequestRepository.deleteAllForProject(projectId);
-        sprintRepository.deleteByProjectId(projectId);
-        issueService.deleteAllForProject(projectId);
-        projectDocumentRepository.deleteByProjectId(projectId);
-        enqueueStoredFileDeletion(project.getProfilePictureKey());
-        chatMessageRepository.deleteByProjectId(projectId);
-        chatAttachmentService.deleteAllForProject(projectId);
-        meetingAttendeeRepository.deleteByProjectId(projectId);
-        meetingRepository.deleteByProjectId(projectId);
-        releaseService.deleteAllForProject(projectId);
-        projectActivityRepository.deleteByProjectId(projectId);
-        milestoneRepository.deleteByProjectId(projectId);
-        projectMemberRepository.deleteAll(projectMemberRepository.findByProjectId(projectId));
-        projectRepository.delete(project);
+        if (project.getDeletedAt() == null) {
+            project.setDeletedAt(Instant.now());
+            project.setStatus(ProjectStatus.DELETED);
+            projectRepository.save(project);
+        }
+    }
+
+    @Override
+    @Transactional
+    public ProjectResponse restore(UUID projectId, UUID userId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
+        projectAccess.requireWorkspaceAndActive(project, userId);
+        if (!userId.equals(project.getAdminId())) {
+            throw new ForbiddenException("Only the admin can restore this project");
+        }
+        if (project.getDeletedAt() != null) {
+            project.setDeletedAt(null);
+            projectRepository.save(project);
+        }
+        return toResponse(project);
     }
 
     private Project find(UUID projectId) {
-        return projectRepository.findById(projectId)
+        Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
+        if (project.getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Project not found");
+        }
+        return project;
     }
     private boolean isInvolved(Project p, UUID userId) {
         boolean leader = Stream.of(p.getCreatedBy(), p.getAdminId(), p.getProjectManagerId(), p.getTeamLeadId())
@@ -447,7 +459,7 @@ public class ProjectServiceImpl implements ProjectService {
         if (!userId.equals(project.getAdminId())) {
             throw new ForbiddenException("Only the admin can remove members");
         }
-        if (sprintRepository.existsByProjectIdAndAssignedContributorId(projectId, memberUserId)) {
+        if (sprintRepository.existsByProjectIdAndAssignedContributorIdAndDeletedAtIsNull(projectId, memberUserId)) {
             throw new BadRequestException(
                     "Cannot remove a member while they are assigned to a sprint. Reassign the sprint first.");
         }

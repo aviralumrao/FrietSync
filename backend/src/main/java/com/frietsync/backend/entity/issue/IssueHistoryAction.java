@@ -18,4 +18,5 @@ public enum IssueHistoryAction {
     LINK_ADDED,
     LINK_REMOVED,
     DELETED,
+    RESTORED,
 }

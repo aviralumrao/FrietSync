@@ -148,7 +148,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
             throw new BadRequestException("Workspace is already pending deletion");
         }
         if (projectRepository.existsByWorkspaceIdAndStatusNotIn(
-                workspaceId, List.of(ProjectStatus.COMPLETED, ProjectStatus.CANCELLED))) {
+                workspaceId, List.of(ProjectStatus.COMPLETED, ProjectStatus.CANCELLED, ProjectStatus.DELETED))) {
             throw new BadRequestException("Complete or cancel all unfinished projects before deleting the workspace");
         }
 

@@ -29,4 +29,6 @@ public interface MilestoneService {
     MilestoneResponse update(UUID milestoneId, UUID userId, UpdateMilestoneRequest request);
 
     void delete(UUID milestoneId, UUID userId);
+
+    MilestoneResponse restore(UUID milestoneId, UUID userId);
 }

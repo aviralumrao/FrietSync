@@ -115,7 +115,7 @@ public class ProjectDashboardService {
                         issue.getTitle(), issue.getDueDate(), issue.getDueDate()));
             }
         }
-        for (Sprint sprint : sprintRepository.findByProjectId(projectId)) {
+        for (Sprint sprint : sprintRepository.findByProjectIdAndDeletedAtIsNull(projectId)) {
             if (sprint.getStartDate() != null || sprint.getEndDate() != null) {
                 events.add(new ProjectCalendarResponse.Event("SPRINT", sprint.getId(), sprint.getName(),
                         sprint.getStartDate(), sprint.getEndDate()));
@@ -150,7 +150,7 @@ public class ProjectDashboardService {
     public ProjectTimelineResponse timeline(UUID projectId, UUID userId) {
         requireProjectMember(projectId, userId);
         List<Issue> issues = issueRepository.findByProjectIdAndDeletedAtIsNullOrderByCreatedAtAsc(projectId);
-        List<Sprint> sprints = sprintRepository.findByProjectId(projectId);
+        List<Sprint> sprints = sprintRepository.findByProjectIdAndDeletedAtIsNull(projectId);
         List<Milestone> milestones = milestoneRepository.findByProjectIdOrderByDueDateAsc(projectId);
         List<ProjectTimelineResponse.Group> groups = new ArrayList<>();
         List<ProjectTimelineResponse.IssueBar> ungroupedIssues = new ArrayList<>();

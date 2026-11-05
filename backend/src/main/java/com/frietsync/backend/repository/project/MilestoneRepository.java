@@ -10,5 +10,7 @@ public interface MilestoneRepository extends JpaRepository<Milestone, UUID> {
 
     List<Milestone> findByProjectIdOrderByDueDateAsc(UUID projectId);
 
+    List<Milestone> findByProjectIdAndDeletedAtIsNullOrderByDueDateAsc(UUID projectId);
+
     void deleteByProjectId(UUID projectId);
 }

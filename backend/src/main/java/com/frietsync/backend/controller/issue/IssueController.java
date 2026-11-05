@@ -101,6 +101,12 @@ public class IssueController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/issues/{issueId}/restore")
+    public ResponseEntity<IssueResponse> restore(@PathVariable UUID issueId,
+                                                 @AuthenticationPrincipal UUID userId) {
+        return ResponseEntity.ok(issueService.restore(issueId, userId));
+    }
+
     @PostMapping("/issues/{issueId}/resolve")
     public ResponseEntity<IssueResponse> resolve(@PathVariable UUID issueId,
                                                  @AuthenticationPrincipal UUID userId) {

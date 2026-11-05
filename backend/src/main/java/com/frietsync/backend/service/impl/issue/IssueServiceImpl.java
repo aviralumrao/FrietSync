@@ -290,6 +290,7 @@ public class IssueServiceImpl implements IssueService {
     }
 
     @Override
+    @Transactional
     public void delete(UUID issueId, UUID userId) {
         Issue issue = access.issue(issueId);
         Project project = access.project(issue.getProjectId());
@@ -316,6 +317,31 @@ public class IssueServiceImpl implements IssueService {
             history.record(issue.getId(), userId, IssueHistoryAction.DELETED);
             milestoneCompletionService.refresh(issue.getMilestoneId(), userId);
         }
+    }
+
+    @Override
+    @Transactional
+    public IssueResponse restore(UUID issueId, UUID userId) {
+        Issue issue = issueRepository.findById(issueId)
+                .orElseThrow(() -> new ResourceNotFoundException("Issue not found"));
+        Project project = access.project(issue.getProjectId());
+        access.requireActiveProject(project);
+        Role role = access.requireMember(project, userId);
+
+        boolean allowed = role == Role.ADMIN
+                || role == Role.PROJECT_MANAGER
+                || role == Role.TEAM_LEAD
+                || (role == Role.REPORTER && userId.equals(issue.getCreatedBy()));
+        if (!allowed) {
+            throw new ForbiddenException("You don't have permission to restore this issue");
+        }
+        if (issue.getDeletedAt() != null) {
+            issue.setDeletedAt(null);
+            issueRepository.save(issue);
+            history.record(issue.getId(), userId, IssueHistoryAction.RESTORED);
+            milestoneCompletionService.refresh(issue.getMilestoneId(), userId);
+        }
+        return mapper.toResponse(issue);
     }
 
     @Override
@@ -506,7 +532,7 @@ public class IssueServiceImpl implements IssueService {
 
     @Override
     public void deleteAllForProject(UUID projectId) {
-        issueRepository.findByProjectId(projectId).forEach(this::purge);
+        issueRepository.findByProjectIdAndDeletedAtIsNull(projectId).forEach(this::purge);
     }
 
     private void purge(Issue issue) {
@@ -545,7 +571,7 @@ public class IssueServiceImpl implements IssueService {
     }
 
     private void validateLinkedSprintDates(UUID issueId, java.time.LocalDate startDate, java.time.LocalDate dueDate) {
-        for (var task : sprintRepository.findByIssueId(issueId)) {
+        for (var task : sprintRepository.findByIssueIdAndDeletedAtIsNull(issueId)) {
             if (startDate != null && task.getStartDate() != null && task.getStartDate().isBefore(startDate)) {
                 throw new BadRequestException("Issue start date cannot be after a linked task start date");
             }

@@ -20,6 +20,7 @@ public interface SprintService {
     SprintResponse startSprint(UUID sprintId, UUID currentUserId);
     SprintResponse completeSprint(UUID sprintId, UUID currentUserId);
     void deleteSprint(UUID sprintId, UUID currentUserId);
+    SprintResponse restoreSprint(UUID sprintId, UUID currentUserId);
     SprintResponse assignSprint(UUID sprintId, UUID contributorId, UUID currentUserId);
     SprintAssignmentRequestResponse requestAssignment(UUID sprintId, UUID currentUserId);
     List<SprintAssignmentRequestResponse> listSprintRequests(UUID projectId, UUID currentUserId);

@@ -19,6 +19,7 @@ public interface ProjectService {
     ProjectResponse uploadProfilePicture(UUID projectId, MultipartFile profilePicture, UUID userId);
     ProjectResponse removeProfilePicture(UUID projectId, UUID userId);
     void delete(UUID projectId, UUID userId);
+    ProjectResponse restore(UUID projectId, UUID userId);
     List<MemberResponse> getMembers(UUID projectId, UUID userId);
     InviteResponse inviteMember(UUID projectId, ProjectInviteRequest request, UUID userId);
     void removeMember(UUID projectId, UUID memberUserId, UUID userId);

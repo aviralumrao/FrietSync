@@ -31,6 +31,8 @@ public interface IssueService {
 
     void delete(UUID issueId, UUID userId);
 
+    IssueResponse restore(UUID issueId, UUID userId);
+
     IssueResponse resolve(UUID issueId, UUID userId);
 
     IssueResponse approveReview(UUID issueId, ReviewRequest request, UUID userId);

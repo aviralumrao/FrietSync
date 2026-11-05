@@ -79,6 +79,12 @@ public class ProjectController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{projectId}/restore")
+    public ResponseEntity<ProjectResponse> restore(@PathVariable UUID projectId,
+                                                  @AuthenticationPrincipal UUID userId) {
+        return ResponseEntity.ok(projectService.restore(projectId, userId));
+    }
+
     @GetMapping("/{projectId}/members")
     public ResponseEntity<List<MemberResponse>> members(@PathVariable UUID projectId,
                                                         @AuthenticationPrincipal UUID userId) {

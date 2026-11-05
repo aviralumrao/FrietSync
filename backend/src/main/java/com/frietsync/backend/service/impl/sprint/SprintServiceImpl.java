@@ -32,6 +32,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -86,7 +87,7 @@ public class SprintServiceImpl implements SprintService {
     public List<SprintResponse> listSprints(UUID projectId, UUID currentUserId) {
         checkMember(projectId, currentUserId);
         List<SprintResponse> responses = new ArrayList<>();
-        for (Sprint sprint : sprintRepository.findByProjectId(projectId)) {
+        for (Sprint sprint : sprintRepository.findByProjectIdAndDeletedAtIsNull(projectId)) {
             responses.add(toResponse(sprint));
         }
         return responses;
@@ -110,7 +111,7 @@ public class SprintServiceImpl implements SprintService {
                 .orElseThrow(() -> new ResourceNotFoundException("Issue not found"));
         checkMember(issue.getProjectId(), currentUserId);
         List<SprintResponse> responses = new ArrayList<>();
-        for (Sprint sprint : sprintRepository.findByIssueIdOrderByCreatedAtDesc(issueId)) {
+        for (Sprint sprint : sprintRepository.findByIssueIdOrderByCreatedAtDescAndDeletedAtIsNull(issueId)) {
             responses.add(toResponse(sprint));
         }
         return responses;
@@ -206,13 +207,30 @@ public class SprintServiceImpl implements SprintService {
     @Override
     @Transactional
     public void deleteSprint(UUID sprintId, UUID currentUserId) {
-        Sprint sprint = findSprintOrThrow(sprintId);
+        Sprint sprint = sprintRepository.findByIdForUpdate(sprintId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sprint not found"));
+        Project project = findProjectForWrite(sprint.getProjectId());
+        projectAccess.requireActiveProject(project);
+        requireProjectManager(sprint.getProjectId(), currentUserId);
+        if (sprint.getDeletedAt() == null) {
+            sprint.setDeletedAt(Instant.now());
+            sprintRepository.save(sprint);
+        }
+    }
+
+    @Override
+    @Transactional
+    public SprintResponse restoreSprint(UUID sprintId, UUID currentUserId) {
+        Sprint sprint = sprintRepository.findById(sprintId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sprint not found"));
         Project project = findProjectOrThrow(sprint.getProjectId());
         projectAccess.requireActiveProject(project);
         requireProjectManager(sprint.getProjectId(), currentUserId);
-        assignmentRequestRepository.deleteBySprintId(sprintId);
-        sprintCommentRepository.deleteBySprintId(sprintId);
-        sprintRepository.delete(sprint);
+        if (sprint.getDeletedAt() != null) {
+            sprint.setDeletedAt(null);
+            sprintRepository.save(sprint);
+        }
+        return toResponse(sprint);
     }
 
     @Override
@@ -479,8 +497,12 @@ public class SprintServiceImpl implements SprintService {
     }
 
     private Sprint findSprintOrThrow(UUID sprintId) {
-        return sprintRepository.findById(sprintId)
+        Sprint sprint = sprintRepository.findById(sprintId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sprint not found"));
+        if (sprint.getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Sprint not found");
+        }
+        return sprint;
     }
 
 }

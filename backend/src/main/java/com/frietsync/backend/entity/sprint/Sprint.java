@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -48,4 +49,7 @@ public class Sprint extends BaseEntity {
 
     @Column(name = "assigned_contributor_id")
     private UUID assignedContributorId;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 }

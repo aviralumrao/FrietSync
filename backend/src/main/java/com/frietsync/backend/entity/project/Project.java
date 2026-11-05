@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -62,4 +63,7 @@ public class Project extends BaseEntity {
 
     @Column(name = "team_lead_id")
     private UUID teamLeadId;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 }

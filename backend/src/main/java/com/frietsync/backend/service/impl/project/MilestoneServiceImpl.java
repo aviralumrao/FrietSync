@@ -62,7 +62,7 @@ public class MilestoneServiceImpl implements MilestoneService {
         requireProjectMember(project, userId);
 
         List<MilestoneResponse> responses = new ArrayList<>();
-        for (Milestone milestone : milestoneRepository.findByProjectIdOrderByDueDateAsc(projectId)) {
+        for (Milestone milestone : milestoneRepository.findByProjectIdAndDeletedAtIsNullOrderByDueDateAsc(projectId)) {
             responses.add(toResponse(milestone));
         }
         return responses;
@@ -123,8 +123,26 @@ public class MilestoneServiceImpl implements MilestoneService {
         Project project = findProject(milestone.getProjectId());
         projectAccess.requireActiveProject(project);
         requireProjectManager(project, userId);
-        issueRepository.clearMilestoneLink(milestoneId);
-        milestoneRepository.delete(milestone);
+        if (milestone.getDeletedAt() == null) {
+            issueRepository.clearMilestoneLink(milestoneId);
+            milestone.setDeletedAt(java.time.Instant.now());
+            milestoneRepository.save(milestone);
+        }
+    }
+
+    @Override
+    @Transactional
+    public MilestoneResponse restore(UUID milestoneId, UUID userId) {
+        Milestone milestone = milestoneRepository.findById(milestoneId)
+                .orElseThrow(() -> new ResourceNotFoundException("Milestone not found"));
+        Project project = findProject(milestone.getProjectId());
+        projectAccess.requireActiveProject(project);
+        requireProjectManager(project, userId);
+        if (milestone.getDeletedAt() != null) {
+            milestone.setDeletedAt(null);
+            milestoneRepository.save(milestone);
+        }
+        return toResponse(milestone);
     }
 
     private MilestoneResponse toResponse(Milestone milestone) {
@@ -140,8 +158,12 @@ public class MilestoneServiceImpl implements MilestoneService {
     }
 
     private Milestone findMilestone(UUID milestoneId) {
-        return milestoneRepository.findById(milestoneId)
+        Milestone milestone = milestoneRepository.findById(milestoneId)
                 .orElseThrow(() -> new ResourceNotFoundException("Milestone not found"));
+        if (milestone.getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Milestone not found");
+        }
+        return milestone;
     }
 
     private Project findProject(UUID projectId) {

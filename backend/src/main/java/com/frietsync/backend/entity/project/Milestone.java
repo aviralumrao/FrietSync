@@ -31,4 +31,7 @@ public class Milestone extends BaseEntity {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 }

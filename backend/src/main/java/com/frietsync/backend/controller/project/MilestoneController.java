@@ -59,4 +59,11 @@ public class MilestoneController {
         milestoneService.delete(milestoneId, userId);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/milestones/{milestoneId}/restore")
+    public ResponseEntity<MilestoneResponse> restore(
+            @PathVariable UUID milestoneId,
+            @AuthenticationPrincipal UUID userId) {
+        return ResponseEntity.ok(milestoneService.restore(milestoneId, userId));
+    }
 }

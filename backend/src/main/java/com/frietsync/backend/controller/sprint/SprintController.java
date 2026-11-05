@@ -99,6 +99,13 @@ public class SprintController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/sprints/{id}/restore")
+    public ResponseEntity<SprintResponse> restoreSprint(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UUID currentUserId) {
+        return ResponseEntity.ok(sprintService.restoreSprint(id, currentUserId));
+    }
+
     @PostMapping("/sprints/{id}/assign")
     public ResponseEntity<SprintResponse> assignSprint(
             @PathVariable UUID id,
