@@ -51,6 +51,7 @@ public class SprintServiceImpl implements SprintService {
     private final SprintCommentRepository sprintCommentRepository;
     private final ProjectAccess projectAccess;
     private final NotificationPublisher notificationPublisher;
+    private final SprintEmbeddingService sprintEmbeddingService;
 
     @Override
     @Transactional
@@ -77,6 +78,7 @@ public class SprintServiceImpl implements SprintService {
         sprint.setCreatedBy(currentUserId);
 
         Sprint savedSprint = sprintRepository.save(sprint);
+        sprintEmbeddingService.generateAndSave(savedSprint);
         project.setSprintCounter(nextNumber);
         projectRepository.save(project);
         return toResponse(savedSprint);
@@ -152,6 +154,7 @@ public class SprintServiceImpl implements SprintService {
         sprint.setStartDate(updatedStartDate);
         sprint.setEndDate(updatedEndDate);
         Sprint updatedSprint = sprintRepository.save(sprint);
+        sprintEmbeddingService.generateAndSave(updatedSprint);
         return toResponse(updatedSprint);
     }
 
@@ -167,6 +170,7 @@ public class SprintServiceImpl implements SprintService {
         }
         sprint.setStatus(request.status());
         Sprint updatedSprint = sprintRepository.save(sprint);
+        sprintEmbeddingService.generateAndSave(updatedSprint);
         return toResponse(updatedSprint);
     }
 
@@ -186,6 +190,7 @@ public class SprintServiceImpl implements SprintService {
 
         sprint.setStatus(SprintStatus.ACTIVE);
         Sprint updatedSprint = sprintRepository.save(sprint);
+        sprintEmbeddingService.generateAndSave(updatedSprint);
         return toResponse(updatedSprint);
     }
 
@@ -201,6 +206,7 @@ public class SprintServiceImpl implements SprintService {
         }
         sprint.setStatus(SprintStatus.COMPLETED);
         Sprint updatedSprint = sprintRepository.save(sprint);
+        sprintEmbeddingService.generateAndSave(updatedSprint);
         return toResponse(updatedSprint);
     }
 

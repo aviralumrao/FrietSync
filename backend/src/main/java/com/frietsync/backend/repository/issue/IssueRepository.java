@@ -78,6 +78,8 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
             + "i.title AS title, i.description AS description, i.status AS status, i.priority AS priority, "
             + "1 - (i.embedding <=> CAST(:queryEmbedding AS vector)) AS similarity "
             + "FROM issues i JOIN projects p ON p.id = i.project_id "
+            + "JOIN users u ON u.id = :userId AND u.workspace_id = p.workspace_id "
+            + "JOIN workspaces w ON w.id = p.workspace_id AND w.deletion_requested_at IS NULL "
             + "WHERE i.embedding IS NOT NULL AND i.deleted_at IS NULL AND p.deleted_at IS NULL "
             + "AND (p.admin_id = :userId OR p.project_manager_id = :userId OR p.team_lead_id = :userId "
             + "OR EXISTS (SELECT 1 FROM project_members pm "

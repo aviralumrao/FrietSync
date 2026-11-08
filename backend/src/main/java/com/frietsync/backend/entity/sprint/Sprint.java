@@ -52,4 +52,7 @@ public class Sprint extends BaseEntity {
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
+
+    @Column(name = "embedding", columnDefinition = "vector(1536)")
+    private String embedding;
 }
