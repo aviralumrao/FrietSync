@@ -45,10 +45,11 @@ public class IssueEmbeddingService {
             LOG.error("Embedding issue {} failed", issue.getId(), ex);
             throw new AiServiceException("The AI service is not available right now. Please try again later.");
         }
+        String embedding = formatVector(vector);
         if (onlyIfMissing) {
-            issueRepository.updateEmbeddingIfMissing(issue.getId(), formatVector(vector));
+            issueRepository.updateEmbeddingIfMissing(issue.getId(), embedding);
         } else {
-            issueRepository.updateEmbedding(issue.getId(), formatVector(vector));
+            issueRepository.updateEmbedding(issue.getId(), embedding);
         }
     }
 

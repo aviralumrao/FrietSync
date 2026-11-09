@@ -58,7 +58,9 @@ public class DocumentEmbeddingService {
         }
 
         chunkRepository.deleteByDocumentId(document.getId());
-        chunkRepository.saveAll(chunks);
+        if (!chunks.isEmpty()) {
+            chunkRepository.saveAll(chunks);
+        }
         document.setEmbedding(null);
         documentRepository.save(document);
     }

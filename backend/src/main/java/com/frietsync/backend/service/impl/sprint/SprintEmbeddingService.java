@@ -33,8 +33,11 @@ public class SprintEmbeddingService {
                 + "\nStatus: " + sprint.getStatus();
         try {
             String vector = formatVector(embeddingModel.embed(text));
-            if (onlyIfMissing) sprintRepository.updateEmbeddingIfMissing(sprint.getId(), vector);
-            else sprintRepository.updateEmbedding(sprint.getId(), vector);
+            if (onlyIfMissing) {
+                sprintRepository.updateEmbeddingIfMissing(sprint.getId(), vector);
+            } else {
+                sprintRepository.updateEmbedding(sprint.getId(), vector);
+            }
         } catch (RuntimeException ex) {
             LOG.error("Embedding sprint {} failed", sprint.getId(), ex);
             throw new AiServiceException("The AI service is not available right now. Please try again later.");

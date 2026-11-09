@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -51,10 +52,19 @@ public class SemanticSearchService {
 
         String vector = formatVector(embedding);
         List<SemanticIssueResult> results = new ArrayList<>();
-        issueRepository.searchSemanticallyForUser(userId, vector, MAX_RESULTS).stream()
-                .map(this::toResult).forEach(results::add);
-        sprintRepository.searchSemanticallyForUser(userId, vector, MAX_RESULTS).stream()
-                .map(this::toSprintResult).forEach(results::add);
+
+        List<SemanticIssueResult> issueResults = issueRepository.searchSemanticallyForUser(userId, vector, MAX_RESULTS)
+                .stream()
+                .map(this::toResult)
+                .collect(Collectors.toList());
+        results.addAll(issueResults);
+
+        List<SemanticIssueResult> sprintResults = sprintRepository.searchSemanticallyForUser(userId, vector, MAX_RESULTS)
+                .stream()
+                .map(this::toSprintResult)
+                .collect(Collectors.toList());
+        results.addAll(sprintResults);
+
         return results.stream()
                 .sorted(Comparator.comparingDouble(SemanticIssueResult::similarity).reversed())
                 .limit(MAX_RESULTS)
