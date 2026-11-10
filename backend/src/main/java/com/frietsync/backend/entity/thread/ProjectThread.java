@@ -9,7 +9,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.time.Instant;
-import java.uuid.UUID;
+import java.util.UUID;
 
 @Data
 @EqualsAndHashCode(callSuper = false)
@@ -19,10 +19,10 @@ import java.uuid.UUID;
 public class ProjectThread extends BaseEntity {
 
     @Column(name = "project_id", nullable = false, updatable = false)
-    private java.util.UUID projectId;
+    private UUID projectId;
 
     @Column(name = "author_id", nullable = false, updatable = false)
-    private java.util.UUID authorId;
+    private UUID authorId;
 
     @Column(nullable = false, length = 200)
     private String title;

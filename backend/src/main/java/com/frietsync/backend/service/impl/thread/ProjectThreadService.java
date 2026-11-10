@@ -73,7 +73,7 @@ public class ProjectThreadService {
         List<UUID> userIds = comments.stream().map(ThreadComment::getAuthorId).collect(Collectors.toList());
         userIds.add(thread.getAuthorId());
         Map<UUID, String> userNames = userRepository.findAllById(userIds).stream()
-                .collect(Collectors.toMap(User::getId, u -> u.getFirstName() + " " + u.getLastName()));
+                .collect(Collectors.toMap(User::getId, User::getName));
 
         ThreadDetailResponse response = new ThreadDetailResponse();
         response.setId(thread.getId());
